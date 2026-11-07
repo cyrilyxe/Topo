@@ -1,6 +1,6 @@
 "use strict";
 
-// Graphical editing tools (selection, hand, brick, link), deletion and layer order.
+// Graphical editing tools (selection, hand, brick, link, move), deletion and layer order.
 // Every change goes through App.edit -> DocEdit, so the YAML stays the source of truth.
 const Tools = {
   STORE_KEY: "topo:tool",
@@ -9,13 +9,15 @@ const Tools = {
     { id: "select", key: "V", name: "Sélection", icon: "<path d=\"M5 3l14 8-6 2-3 6z\" />" },
     { id: "hand", key: "H", name: "Main", icon: "<path d=\"M8 12V6a1.5 1.5 0 013 0v5m0-1V4.5a1.5 1.5 0 013 0V11m0-4.5a1.5 1.5 0 013 0V15a6 6 0 01-6 6h-1a6 6 0 01-5-3l-2-4a1.5 1.5 0 012.5-1.5L8 14\" />" },
     { id: "brick", key: "B", name: "Brique", icon: "<rect x=\"4\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\" /><path d=\"M19 3v6M16 6h6\" />" },
-    { id: "link", key: "L", name: "Lien", icon: "<circle cx=\"5\" cy=\"18\" r=\"2.5\" /><circle cx=\"19\" cy=\"6\" r=\"2.5\" /><path d=\"M7 16.5L17 7.5\" stroke-dasharray=\"3 2\" />" }
+    { id: "link", key: "L", name: "Lien", icon: "<circle cx=\"5\" cy=\"18\" r=\"2.5\" /><circle cx=\"19\" cy=\"6\" r=\"2.5\" /><path d=\"M7 16.5L17 7.5\" stroke-dasharray=\"3 2\" />" },
+    { id: "move", key: "M", name: "Déplacer dans…", icon: "<rect x=\"3\" y=\"12\" width=\"18\" height=\"9\" rx=\"2\" /><path d=\"M12 3v10m0 0l-3.5-3.5M12 13l3.5-3.5\" />" }
   ],
   HELP: {
     select: "Sélection : clic = sélectionner (Maj/Ctrl pour ajouter), glissez le fond pour un rectangle, glissez une brique pour la déplacer — Suppr pour supprimer",
     hand: "Main : glissez pour déplacer la vue — Échap pour revenir à la sélection",
     brick: "Brique : cliquez une brique pour lui ajouter un enfant, ou le fond pour une brique racine — Échap pour revenir à la sélection",
-    link: "Lien : glissez d’une brique à une autre pour les relier — Échap pour annuler"
+    link: "Lien : glissez d’une brique à une autre pour les relier — Échap pour annuler",
+    move: "Glissez une brique sur une autre pour l’y ranger, ou sur le fond pour la sortir à la racine — Échap annule"
   },
   PLAN: [["front", "Premier plan"], ["forward", "Avancer"], ["backward", "Reculer"], ["back", "Arrière-plan"]],
 
@@ -24,6 +26,7 @@ const Tools = {
   mod: false,
   muted: false,
   linkDrag: null,
+  moveDrag: null,
   els: {},
   changeTimer: null,
 
@@ -83,6 +86,7 @@ const Tools = {
     }
 
     this.cancelLink();
+    this.cancelMove();
     this.tool = id;
     App.store(this.STORE_KEY, id);
     this.applyTool();
@@ -92,9 +96,9 @@ const Tools = {
     const cy = this.cy;
     const current = this.current;
 
-    cy.userPanningEnabled(current !== "select");
+    cy.userPanningEnabled(current !== "select" && current !== "move");
     cy.boxSelectionEnabled(current === "select");
-    cy.autoungrabify(current !== "select");
+    cy.autoungrabify(current !== "select" && current !== "move");
     cy.autounselectify(current === "hand");
 
     this.els.wrap.dataset.tool = current;
@@ -111,7 +115,7 @@ const Tools = {
 
   selection() {
     return {
-      nodes: this.cy.nodes(":selected").map((node) => node.id()),
+      nodes: this.cy.nodes(":selected").not(".meta-card").map((node) => node.id()),
       edges: this.cy.edges(":selected").map((edge) => edge.id())
     };
   },
@@ -171,7 +175,7 @@ const Tools = {
     });
 
     cy.on("tap", (event) => {
-      if (this.current !== "brick") {
+      if (this.current !== "brick" || (event.target !== cy && event.target.hasClass("meta-card"))) {
         return;
       }
 
@@ -179,6 +183,10 @@ const Tools = {
     });
 
     cy.on("mousedown", (event) => this.linkStart(event));
+    cy.on("grab", "node", (event) => this.moveStart(event.target));
+    cy.on("drag", "node", () => this.moveKeep());
+    cy.on("free", "node", (event) => this.moveEnd(event.target));
+    window.addEventListener("mousemove", (event) => this.moveTrack(event));
     window.addEventListener("mousemove", (event) => this.linkMove(event));
     window.addEventListener("mouseup", (event) => this.linkEnd(event));
   },
@@ -211,7 +219,7 @@ const Tools = {
     let best = null;
     let area = Infinity;
 
-    this.cy.nodes().forEach((node) => {
+    this.cy.nodes().not(".meta-card").forEach((node) => {
       const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
 
       if (x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2 && box.w * box.h < area) {
@@ -289,6 +297,194 @@ const Tools = {
     if (values && App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
       App.showMessage(`Lien ajouté : ${values.from} → ${values.to}.`, "success");
     }
+  },
+
+  // ---- move tool ("Déplacer dans…") ----
+
+  ensureMoveStyles() {
+    const style = this.cy.style();
+
+    if (style.json().some((rule) => rule.selector === "node.drop-target")) {
+      return;
+    }
+
+    const token = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+    style
+      .selector("node.floating").style({ opacity: 0.55, "z-index": 9999, "z-index-compare": "manual" })
+      .selector("node.drop-target").style({
+        "border-width": 4,
+        "border-color": token("--drop-target", "#16a34a"),
+        "underlay-color": token("--drop-target", "#16a34a"),
+        "underlay-opacity": 0.25,
+        "underlay-padding": 8
+      })
+      .update();
+  },
+
+  isMovable(id) {
+    const model = App.getModel();
+
+    return Boolean(model && model.byId.has(id) && !id.startsWith("card:"));
+  },
+
+  moveBoxes(dragId) {
+    const model = App.getModel();
+    const banned = new Set([dragId, ...this.descendants(model, dragId)]);
+    const boxes = [];
+
+    this.cy.nodes().forEach((node) => {
+      const id = node.id();
+
+      if (banned.has(id) || !this.isMovable(id)) {
+        return;
+      }
+
+      const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+
+      boxes.push({ id, x1: box.x1, x2: box.x2, y1: box.y1, y2: box.y2, area: box.w * box.h });
+    });
+
+    return boxes;
+  },
+
+  // Deepest box (frozen at grab time, so the parent does not stretch with the dragged brick) under a client point.
+  moveTargetAt(clientX, clientY) {
+    const rect = this.cy.container().getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    let best = null;
+
+    this.moveDrag.boxes.forEach((box) => {
+      if (x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2 && (!best || box.area < best.area)) {
+        best = box;
+      }
+    });
+
+    return best ? best.id : null;
+  },
+
+  movePositions(node) {
+    const out = {};
+
+    node.union(node.descendants()).nodes().filter((item) => !item.isParent()).forEach((item) => {
+      out[item.id()] = { ...item.position() };
+    });
+
+    return out;
+  },
+
+  moveStart(node) {
+    if (this.current !== "move" || this.moveDrag) {
+      return;
+    }
+
+    if (!this.isMovable(node.id())) {
+      node.ungrabify();
+      setTimeout(() => node.grabify(), 0);
+      return;
+    }
+
+    this.ensureMoveStyles();
+    this.moveDrag = {
+      id: node.id(),
+      parent: App.getModel().byId.get(node.id()).parent || null,
+      origin: this.movePositions(node),
+      boxes: this.moveBoxes(node.id()),
+      target: App.getModel().byId.get(node.id()).parent || null,
+      cancelled: false
+    };
+    node.addClass("floating");
+  },
+
+  moveTrack(event) {
+    const drag = this.moveDrag;
+
+    if (!drag || drag.cancelled) {
+      return;
+    }
+
+    const target = this.moveTargetAt(event.clientX, event.clientY);
+
+    drag.pointer = { x: event.clientX, y: event.clientY };
+    drag.target = target;
+    this.cy.nodes().removeClass("drop-target");
+
+    if (target !== null && target !== drag.parent) {
+      this.cy.getElementById(target).addClass("drop-target");
+    }
+  },
+
+  // After Escape the brick stays pinned to its origin until the mouse is released.
+  moveKeep() {
+    if (this.moveDrag && this.moveDrag.cancelled) {
+      this.restorePositions(this.moveDrag);
+    }
+  },
+
+  restorePositions(drag) {
+    Object.keys(drag.origin).forEach((id) => this.cy.getElementById(id).position(drag.origin[id]));
+  },
+
+  clearMoveClasses() {
+    this.cy.nodes().removeClass("floating drop-target");
+  },
+
+  cancelMove() {
+    const drag = this.moveDrag;
+
+    if (!drag || drag.cancelled) {
+      return;
+    }
+
+    drag.cancelled = true;
+    this.restorePositions(drag);
+    this.clearMoveClasses();
+    App.showMessage("Déplacement annulé.", "info");
+  },
+
+  moveEnd() {
+    const drag = this.moveDrag;
+
+    if (!drag) {
+      return;
+    }
+
+    this.moveDrag = null;
+    this.clearMoveClasses();
+
+    if (drag.cancelled || !App.getModel().byId.has(drag.id)) {
+      return;
+    }
+
+    if (drag.target === drag.parent) {
+      return;
+    }
+
+    this.reparent(drag);
+  },
+
+  reparent(drag) {
+    const model = App.getModel();
+    const node = model.byId.get(drag.id);
+    const target = drag.target === null ? null : model.byId.get(drag.target);
+    const where = target ? `dans « ${target.label} »` : "à la racine";
+    const wasCollapsed = Boolean(target) && App.collapsed.has(target.id);
+
+    if (wasCollapsed) {
+      App.collapsed.delete(target.id);
+    }
+
+    if (App.edit(`Déplacement de « ${node.label} » ${where}`, (text) => DocEdit.moveNode(text, drag.id, target ? target.id : null))) {
+      App.showMessage(`« ${node.label} » déplacé ${where}.`, "success");
+      return;
+    }
+
+    if (wasCollapsed) {
+      App.collapsed.add(target.id);
+    }
+
+    this.restorePositions(drag);
   },
 
   // ---- bricks ----
@@ -700,6 +896,8 @@ const Tools = {
   onEscape() {
     if (this.linkDrag) {
       this.cancelLink();
+    } else if (this.moveDrag) {
+      this.cancelMove();
     } else if (this.tool !== "select") {
       this.setTool("select");
     } else {

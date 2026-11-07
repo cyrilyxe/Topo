@@ -15,7 +15,10 @@
     to: ["to", "vers"],
     label: ["label", "titre", "title"],
     settings: ["settings", "reglages"],
-    trash: ["trash"]
+    trash: ["trash"],
+    rules: ["rules", "regles"],
+    target: ["target", "cible"],
+    collapsed: ["collapsed", "replies"]
   };
 
   const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -282,7 +285,7 @@
     const roots = topMost(ctx.model, ids);
     const groups = roots.map((id) => subtreeIds(ctx.model, id));
     const removed = new Set([].concat(...groups));
-    const plans = planLinks(ctx, removed, !!options.relinkToParent);
+    const plans = options.keepLinks ? [] : planLinks(ctx, removed, !!options.relinkToParent);
 
     const trashed = roots.map((id, i) => {
       const entry = entryOf(ctx, id);
@@ -302,6 +305,56 @@
     return { text: dump(ctx.doc), trashed };
   }
 
+  // New internal id of each moved node (old internal id -> new internal id), matching both subtrees in parallel.
+  function movedIdMap(before, after, id, newQ) {
+    const map = new Map();
+    const pair = (oldNode, newNode) => {
+      if (!newNode) return;
+      map.set(oldNode.id, newNode.id);
+      oldNode.children.forEach((c, i) => pair(before.byId.get(c), after.byId.get(newNode.children[i])));
+    };
+    pair(before.byId.get(id), after.nodes.find((n) => n.qualifiedId === newQ));
+    return map;
+  }
+
+  function refTargets(ctx) {
+    const out = [];
+    const scalarRef = (holder, side) => {
+      const pair = findPair(holder, namesOf(side));
+      if (pair && YAML.isScalar(pair.value)) out.push({ ref: pair.value.value, set: (v) => { pair.value.value = v; } });
+    };
+    rawLinks(ctx).forEach((item) => { if (YAML.isMap(item)) { scalarRef(item, "from"); scalarRef(item, "to"); } });
+    const style = getNode(ctx.root, "style");
+    const rules = YAML.isMap(style) ? getNode(style, "rules") : null;
+    if (YAML.isSeq(rules)) rules.items.forEach((r) => { if (YAML.isMap(r)) scalarRef(r, "target"); });
+    const view = getNode(ctx.root, "view");
+    if (!YAML.isMap(view)) return out;
+    const collapsed = getNode(view, "collapsed");
+    if (YAML.isSeq(collapsed)) collapsed.items.forEach((it) => { if (YAML.isScalar(it)) out.push({ ref: it.value, set: (v) => { it.value = v; } }); });
+    const positions = getNode(view, "positions");
+    if (YAML.isMap(positions)) {
+      positions.items.forEach((p) => {
+        if (!YAML.isScalar(p.key)) p.key = new YAML.Scalar(p.key);
+        out.push({ ref: p.key.value, set: (v) => { p.key.value = v; } });
+      });
+    }
+    return out;
+  }
+
+  // Rewrites references whose resolution changed because a subtree moved (qualified paths changed).
+  function rewriteRefs(ctx, before, after, moved) {
+    refTargets(ctx).forEach((t) => {
+      const old = Model.resolveRef(t.ref, before);
+      if (old.error) return;
+      const oldNode = before.byId.get(old.id);
+      const expected = moved.has(old.id) ? after.byId.get(moved.get(old.id)) : after.nodes.find((n) => n.qualifiedId === oldNode.qualifiedId);
+      if (!expected) return;
+      const now = Model.resolveRef(t.ref, after);
+      if (!now.error && now.id === expected.id) return;
+      t.set(expected.id);
+    });
+  }
+
   function moveNode(text, id, newParentId, index) {
     const ctx = open(text);
     const entry = entryOf(ctx, id);
@@ -310,9 +363,16 @@
       entryOf(ctx, target);
       if (subtreeIds(ctx.model, id).includes(target)) throw new Error("Impossible de déplacer un nœud dans son propre sous-arbre.");
     }
+    const rawId = YAML.isMap(entry.map) ? String(entry.map.get("id") === undefined ? "" : entry.map.get("id")).trim() : "";
+    const targetQ = target === null ? null : ctx.model.byId.get(target).qualifiedId;
+    const newQ = rawId.includes(".") || !targetQ ? (rawId || id) : `${targetQ}.${rawId}`;
     detach(entry);
     const holder = containerFor(ctx, target, true);
     insertAt(holder.seq, entry.map, index);
+    const moved = dump(ctx.doc);
+    const after = Model.parse(moved);
+    const map = movedIdMap(ctx.model, after, id, newQ);
+    rewriteRefs(ctx, ctx.model, after, map);
     return dump(ctx.doc);
   }
 

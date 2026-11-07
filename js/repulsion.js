@@ -49,9 +49,14 @@ const Repulsion = {
 
   // Moves `node` (and its descendants) clear of its siblings; calls onDone(moved) when finished.
   apply(node, onDone) {
+    if (node.hasClass("meta-card") && !node.data("free")) {
+      onDone?.(false);
+      return;
+    }
+
     const parent = node.data("parent") || null;
     const others = node.cy().nodes()
-      .filter((item) => item.id() !== node.id() && (item.data("parent") || null) === parent)
+      .filter((item) => item.id() !== node.id() && !item.hasClass("meta-card") && (item.data("parent") || null) === parent)
       .map((item) => this.boxOf(item));
 
     const shift = this.findFreeShift(this.boxOf(node), others, this.MARGIN);

@@ -215,3 +215,63 @@ test("trash restore undoes relinking and falls back to root", () => {
   assert.strictEqual(parentOf(restored, "cache"), null);
   assert.throws(() => DocEdit.trashRestore(SAMPLE, 0), /corbeille/);
 });
+
+const REFS = `title: R
+nodes:
+  - id: a
+    children:
+      - id: x
+      - id: cache
+        children:
+          - id: leaf
+  - id: b
+    children:
+      - id: cache
+  - id: solo
+    children:
+      - id: only
+links:
+  - from: x
+    to: a.cache
+  - from: a.cache.leaf
+    to: b
+  - from: only
+    to: b.cache
+style:
+  rules:
+    - target: a.cache
+      color: red
+    - target: only
+      color: blue
+view:
+  collapsed: [a.cache]
+  positions:
+    a.cache.leaf: { x: 1, y: 2 }
+    only: { x: 3, y: 4 }
+`;
+
+test("moveNode rewrites qualified refs of the node and its descendants", () => {
+  const t = DocEdit.moveNode(REFS, "a.cache", "x");
+  const m = Model.parse(t);
+  assert.ok(m.byId.has("a.x.cache") && m.byId.has("leaf"));
+  assert.deepStrictEqual(m.links.map((l) => [l.from, l.to]), [["x", "a.x.cache"], ["leaf", "b"], ["only", "b.cache"]]);
+  assert.deepStrictEqual(m.style.rules.map((r) => r.target), ["a.x.cache", "only"]);
+  assert.deepStrictEqual(m.view.collapsed, ["a.x.cache"]);
+  assert.ok(m.view.positions.leaf && m.view.positions.only);
+  assert.strictEqual(m.anomalies.filter((a) => a.level === "error").length, 0);
+});
+
+test("moveNode leaves unique local refs untouched", () => {
+  const t = DocEdit.moveNode(REFS, "only", "a");
+  assert.ok(t.includes("from: only") && t.includes("target: only") && t.includes("only: { x: 3, y: 4 }"));
+  assert.deepStrictEqual(Model.parse(t).links[2], { ...Model.parse(t).links[2], from: "only", to: "b.cache" });
+});
+
+test("moveNode to root rewrites refs and keeps resolution", () => {
+  const t = DocEdit.moveNode(REFS, "b.cache", null);
+  const m = Model.parse(t);
+  assert.strictEqual(m.links.length, 3);
+  assert.strictEqual(m.links[2].to, "cache");
+  assert.ok(t.includes("to: cache"));
+  assert.strictEqual(m.anomalies.filter((a) => a.level === "error").length, 0);
+});

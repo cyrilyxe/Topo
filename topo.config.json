@@ -6,7 +6,6 @@
   "nodes.size": 1,
   "layout.default": "fcose",
   "tree.indent": 28,
-  "meta.card.when": "never",
   "meta.card.position": "top-right",
   "meta.card.maxChars": 50,
   "meta.card.maxLines": 3

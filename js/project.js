@@ -16,6 +16,9 @@ const Project = {
   lastScan: 0,
   timer: null,
   busy: false,
+  working: false,
+  undoStack: [],
+  redoStack: [],
   els: {},
 
   // ---- lifecycle ----
@@ -34,6 +37,7 @@ const Project = {
     });
     this.els.content.addEventListener("click", (event) => this.onClick(event));
     this.els.banner.addEventListener("click", (event) => this.onClick(event));
+    window.addEventListener("keydown", (event) => this.onUndoKey(event), true);
   },
 
   async open() {
@@ -51,6 +55,8 @@ const Project = {
       }
 
       this.isOpen = true;
+      this.undoStack = [];
+      this.redoStack = [];
       this.mode = "merged";
       this.els.tab.hidden = false;
       await this.rebuild({ force: true, first: true });
@@ -117,6 +123,8 @@ const Project = {
     this.isOpen = false;
     this.mode = null;
     this.sourcePath = null;
+    this.undoStack = [];
+    this.redoStack = [];
     this.root = null;
     this.bricks = [];
     this.anomalies = [];
@@ -125,6 +133,7 @@ const Project = {
     this.els.banner.hidden = true;
     this.els.content.innerHTML = "";
     App.showTab("editor");
+    App.updateHistoryMenu(History.state());
     App.showMessage("Projet fermé.", "info");
   },
 
@@ -331,6 +340,170 @@ const Project = {
     }
   },
 
+  // ---- graphical edits routed to the brick files ----
+
+  shouldRoute() {
+    return Boolean(this.isOpen && this.mode === "merged" && !this.readOnly);
+  },
+
+  brickFiles() {
+    return this.bricks.map((brick) => ({ path: brick.path, text: brick.text }));
+  },
+
+  // Called by App.edit in merged view: translates the edit into brick-file edits (or refuses it).
+  routeEdit(label, fn) {
+    if (this.working) {
+      App.showMessage("Écriture du projet en cours, réessayez dans un instant.", "warning");
+      return false;
+    }
+
+    let result;
+
+    try {
+      const before = App.getText();
+      const next = fn(before);
+
+      if (typeof next !== "string" || next === before) {
+        return false;
+      }
+
+      result = ProjectSync.translate(this.brickFiles(), before, next);
+    } catch (error) {
+      App.showMessage(error.message, error.refusal ? "warning" : "error");
+      return false;
+    }
+
+    if (!Object.keys(result.files).length) {
+      return false;
+    }
+
+    this.run(() => this.commit(label, result.files));
+    return true;
+  },
+
+  run(task) {
+    this.working = true;
+    return task().catch((error) => App.showMessage(`Écriture du projet impossible : ${error.message}`, "error")).finally(() => {
+      this.working = false;
+      this.refreshHistory();
+    });
+  },
+
+  async diskText(path) {
+    const brick = this.bricks.find((item) => item.path === path);
+
+    if (!brick) {
+      return null;
+    }
+
+    return brick.handle ? (await (await brick.handle.getFile()).text()) : brick.text;
+  },
+
+  async assertUntouched(expected) {
+    for (const path of Object.keys(expected)) {
+      const current = await this.diskText(path);
+
+      if (current !== expected[path]) {
+        throw new Error(`« ${path} » a été modifié en dehors de Topo : reconstruisez le projet avant de continuer.`);
+      }
+    }
+  },
+
+  async writeAll(texts) {
+    for (const path of Object.keys(texts)) {
+      const brick = this.bricks.find((item) => item.path === path);
+
+      if (texts[path] === null) {
+        await this.root.removeEntry(path.split("/").pop());
+      } else {
+        await this.writeProjectFile(path, texts[path], brick && brick.handle);
+      }
+    }
+  },
+
+  async commit(label, files) {
+    const before = {};
+    const known = {};
+
+    for (const path of Object.keys(files)) {
+      const brick = this.bricks.find((item) => item.path === path);
+
+      before[path] = brick ? brick.text : null;
+      known[path] = before[path];
+    }
+
+    await this.assertUntouched(known);
+    await this.writeAll(files);
+    this.undoStack.push({ label, before, after: files });
+    this.redoStack = [];
+    await this.rebuild({ force: true });
+    App.showMessage(`${label} : ${Object.keys(files).join(", ")} mis à jour.`, "success");
+  },
+
+  historyState() {
+    const top = (stack) => (stack.length ? stack[stack.length - 1].label : null);
+
+    return {
+      canUndo: this.undoStack.length > 0,
+      canRedo: this.redoStack.length > 0,
+      undoLabel: top(this.undoStack),
+      redoLabel: top(this.redoStack)
+    };
+  },
+
+  refreshHistory() {
+    App.updateHistoryMenu(this.shouldRoute() ? this.historyState() : History.state());
+  },
+
+  undo() {
+    return this.step(this.undoStack, this.redoStack, "before", "after", "Annulé");
+  },
+
+  redo() {
+    return this.step(this.redoStack, this.undoStack, "after", "before", "Rétabli");
+  },
+
+  // Moves one entry between stacks, writing the `target` snapshot of its files.
+  step(from, to, target, current, verb) {
+    const entry = from[from.length - 1];
+
+    if (!entry || this.working) {
+      return null;
+    }
+
+    this.run(async () => {
+      await this.assertUntouched(entry[current]);
+      await this.writeAll(entry[target]);
+      from.pop();
+      to.push(entry);
+      await this.rebuild({ force: true });
+      App.showMessage(`${verb} : ${entry.label}.`, "info");
+    });
+    return entry.label;
+  },
+
+  onUndoKey(event) {
+    if (!this.shouldRoute() || !(event.ctrlKey || event.metaKey) || event.altKey) {
+      return;
+    }
+
+    const target = event.target;
+    const key = event.key.toLowerCase();
+
+    if ((key !== "z" && key !== "y") || (target && target.closest && target.closest(".CodeMirror, input, textarea, select, [contenteditable=\"true\"]"))) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (key === "y" || event.shiftKey) {
+      App.redo();
+    } else {
+      App.undo();
+    }
+  },
+
   // ---- change detection ----
 
   startPolling() {
@@ -399,6 +572,7 @@ const Project = {
   render() {
     this.renderPanel();
     this.renderBanner();
+    this.refreshHistory();
   },
 
   renderBanner() {
@@ -415,7 +589,7 @@ const Project = {
     }
 
     if (this.mode === "merged") {
-      notes.push("Vue fusionnée : les modifications faites ici ne remontent pas dans les briques. Utilisez « Éditer la source » sur un nœud ; Ctrl+S écrit " + this.OUTPUT + ".");
+      notes.push("Vue fusionnée : les éditions graphiques sont écrites dans les petits YAML sources (Ctrl+Z les annule) ; les actions sur un dossier entier sont refusées. Ctrl+S écrit " + this.OUTPUT + ".");
     } else if (this.mode === "source") {
       notes.push(`Édition de la source « ${this.sourcePath} » : Ctrl+S l’enregistre puis reconstruit le fusionné.`);
     }

@@ -189,6 +189,30 @@ const Graph = {
         }
       },
       {
+        selector: "node.meta-card",
+        style: {
+          label: "data(shown)",
+          ...this.fill("--card-fill", "rgba(255,255,255,0.5)"),
+          "border-color": "data(ownerColor)",
+          "border-width": 1.5,
+          "border-style": "solid",
+          color: t("--card-text", "#1f2937"),
+          "font-size": 10,
+          "font-weight": 400,
+          shape: "round-rectangle",
+          width: "label",
+          height: "label",
+          padding: "6px",
+          "text-wrap": "wrap",
+          "text-max-width": "data(maxWidth)",
+          "text-justification": "left",
+          "text-valign": "center",
+          "text-halign": "center",
+          "z-index": 20
+        }
+      },
+      { selector: "node.meta-card[?truncated][!expanded]", style: { "border-style": "dashed" } },
+      {
         selector: "edge",
         style: {
           width: 2,
@@ -304,6 +328,12 @@ const Graph = {
     cy.on("tap", "node", (event) => {
       const node = event.target;
 
+      if (node.hasClass("meta-card")) {
+        node.unselect();
+        MetaCards.toggle(node);
+        return;
+      }
+
       this.callbacks.onNodeTap?.(node.id());
 
       if (this.layoutName === "tree" && this.selectToolActive() && (node.isParent() || node.hasClass("collapsed"))) {
@@ -312,11 +342,11 @@ const Graph = {
     });
 
     cy.on("dbltap", "node", (event) => {
-      if (this.layoutName !== "tree" && this.selectToolActive()) {
+      if (!event.target.hasClass("meta-card") && this.layoutName !== "tree" && this.selectToolActive()) {
         this.callbacks.onNodeDblTap?.(event.target.id());
       }
     });
-    cy.on("cxttap", "node", (event) => this.callbacks.onNodeMenu?.(event.target.id(), point(event)));
+    cy.on("cxttap", "node", (event) => !event.target.hasClass("meta-card") && this.callbacks.onNodeMenu?.(event.target.id(), point(event)));
     cy.on("cxttap", "edge", (event) => this.callbacks.onEdgeMenu?.(event.target.id(), point(event)));
 
     cy.on("cxttap", (event) => {
@@ -331,7 +361,7 @@ const Graph = {
       }
     });
 
-    cy.on("drag", "node", (event) => this.callbacks.onNodeMove?.(event.target.id()));
+    cy.on("drag", "node", (event) => !event.target.hasClass("meta-card") && this.callbacks.onNodeMove?.(event.target.id()));
 
     cy.on("dragfree", "node", (event) => {
       this.pinned = true;
@@ -343,13 +373,18 @@ const Graph = {
     });
 
     cy.on("viewport", () => this.callbacks.onViewChange?.("viewport"));
+    MetaCards.bind(cy);
 
     this.bindToolbar();
 
     if (typeof Settings !== "undefined" && Settings.onChange) {
-      Settings.onChange(() => {
+      Settings.onChange((keys) => {
         this.syncToolbar();
         this.applyTheme();
+
+        if (Array.isArray(keys) && keys.some((key) => key.startsWith("meta.card.")) && typeof App !== "undefined") {
+          App.render();
+        }
       });
     }
 
@@ -440,6 +475,7 @@ const Graph = {
     this.decorate(elements);
 
     const styled = Style.apply(elements, model);
+    const cards = MetaCards.inject(styled.elements, model, known);
     const nodes = styled.elements.filter((element) => element.group === "nodes");
     const parents = new Set(nodes.map((element) => element.data.parent).filter(Boolean));
     const parentOf = new Map(nodes.map((element) => [element.data.id, element.data.parent]));
@@ -473,6 +509,15 @@ const Graph = {
       this.runLayout(opts.layout || "fcose", { fit: !opts.viewport });
     } else if (opts.layout === "tree") {
       this.runLayout("tree", { fit: false });
+    }
+
+    if (cards.length) {
+      cy.add(cards);
+      MetaCards.placeAll(cy);
+
+      if (fullLayout && !opts.viewport) {
+        cy.fit(undefined, 45);
+      }
     }
 
     if (opts.viewport && Number.isFinite(opts.viewport.zoom) && opts.viewport.pan) {
@@ -587,13 +632,15 @@ const Graph = {
       }
     });
 
-    cy.batch(() => {
+    MetaCards.hold(() => cy.batch(() => {
       Object.entries(widths).forEach(([id, width]) => {
         cy.getElementById(id).style("width", width);
       });
 
       Object.entries(positions).forEach(([id, point]) => cy.getElementById(id).position(point));
-    });
+    }));
+
+    MetaCards.placeAll(cy);
 
     if (fit) {
       cy.fit(undefined, 45);
@@ -612,11 +659,12 @@ const Graph = {
       base = "cose";
     }
     const layout = this.cy.layout(Object.assign(
-      { name: base, animate: false, padding: 45, fit: options.fit !== false },
+      { name: base, animate: false, padding: 45, fit: options.fit !== false, eles: this.cy.elements().not(".meta-card") },
       this.LAYOUTS[base]
     ));
 
-    layout.run();
+    MetaCards.hold(() => layout.run());
+    MetaCards.placeAll(this.cy);
   },
 
   relayout(name) {
@@ -629,6 +677,7 @@ const Graph = {
     this.saved = {};
     this.pinned = false;
     this.runLayout(name, { fit: true });
+    MetaCards.placeAll(this.cy, { resetFree: true });
   },
 
   setData(node, key, value) {
@@ -646,7 +695,7 @@ const Graph = {
     this.cy.batch(() => {
       this.cy.edges().removeClass("hl-edge");
 
-      this.cy.nodes().forEach((node) => {
+      this.cy.nodes().not(".meta-card").forEach((node) => {
         const rule = node.data("rule") || {};
         const size = scale * (Number(rule.size) || 1);
         const isGroup = node.isParent();
@@ -701,7 +750,7 @@ const Graph = {
         return;
       }
 
-      this.cy.nodes().filter((node) => !sets.nodes.has(node.id())).addClass("focus-dim");
+      this.cy.nodes().filter((node) => !sets.nodes.has(node.data("owner") || node.id())).addClass("focus-dim");
       this.cy.edges().filter((edge) => !sets.edges.has(edge.id())).addClass("focus-dim");
     });
   },
@@ -797,7 +846,7 @@ const Graph = {
     const positions = {};
 
     this.cy.nodes().forEach((node) => {
-      if (!node.isParent()) {
+      if (!node.isParent() && (!node.hasClass("meta-card") || node.data("free"))) {
         positions[node.id()] = {
           x: Math.round(node.position("x")),
           y: Math.round(node.position("y"))
@@ -869,7 +918,7 @@ const Graph = {
 
     const ids = new Set(matches.map((node) => node.id));
 
-    this.cy.nodes().forEach((node) => {
+    this.cy.nodes().not(".meta-card").forEach((node) => {
       if (ids.has(node.id())) {
         node.addClass("search-hit");
       } else {

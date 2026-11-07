@@ -1,5 +1,9 @@
 title: Données
 role: category
+meta:
+  owner: Équipe Données
+  engine: PostgreSQL 16
+  card: { when: leaf, position: bottom-right }
 nodes:
   - id: database
     label: Base de données

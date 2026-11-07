@@ -163,6 +163,11 @@
     h("Brique", "type", [], "texte libre", "Type de la brique (optionnel).", "type: group"),
     h("Brique", "role", [], "texte libre", "Rôle de la brique (optionnel).", "role: domain"),
     h("Brique", "meta", [], "objet", "Informations libres de la brique (optionnel).", "meta:\n  owner: Équipe A"),
+    h("Brique", "meta.card", [], "objet", "Fiche métadonnées de la brique (clés de meta, filtrées par meta.show). Sans meta.card : réglages globaux meta.card.* ; à défaut, fiche en « leaf » si meta.show existe, sinon aucune.", "meta:\n  owner: Équipe A\n  card: { when: leaf, position: bottom-right, maxChars: 40, maxLines: 4 }"),
+    h("Brique", "meta.card.when", [], "leaf | expanded | always | never", "leaf : brique sans enfant visible (feuille ou groupe replié) ; expanded : groupe déplié ; always ; never.", "  card: { when: always }"),
+    h("Brique", "meta.card.position", [], "texte", "Coin de la fiche : top-left, top-right, bottom-left, bottom-right, ou free (déplaçable, position gardée dans view.positions).", "  card: { position: free }"),
+    h("Brique", "meta.card.maxChars", [], "nombre", "Caractères par ligne avant troncature.", "  card: { maxChars: 40 }"),
+    h("Brique", "meta.card.maxLines", [], "nombre", "Lignes avant troncature (clic sur la fiche = tout afficher).", "  card: { maxLines: 4 }"),
     h("Brique", "nodes", ["noeuds"], "liste", "Nœuds internes de la brique (ids locaux).", "nodes:\n  - id: api"),
     h("Brique", "links", ["liens"], "liste", "Liens résolus avec cette brique comme contexte.", "links:\n  - from: api\n    to: resources")
   ];
@@ -174,7 +179,7 @@
     { keys: "Ctrl+F", description: "Rechercher un nœud" },
     { keys: "Ctrl+Z", description: "Annuler la dernière action graphique" },
     { keys: "Ctrl+Y", description: "Rétablir (aussi Ctrl+Shift+Z)" },
-    { keys: "V / H / B / L", description: "Outil Sélection / Main / Brique / Lien" },
+    { keys: "V / H / B / L / M", description: "Outil Sélection / Main / Brique / Lien / Déplacer dans…" },
     { keys: "Espace (maintenu)", description: "Main temporaire (déplacer la vue)" },
     { keys: "Maj/Ctrl + clic", description: "Ajouter ou retirer une brique de la sélection" },
     { keys: "Suppr / Retour arrière", description: "Supprimer la sélection (vers la corbeille)" },

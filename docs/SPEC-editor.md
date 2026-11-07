@@ -66,9 +66,10 @@ Mode projet : les éditions s'appliquent au petit YAML source (`meta.source`) ; 
 ## 4. Fiches métadonnées (« brique métadonnée »)
 Une fiche = nœud dérivé `meta-card` affichant les métadonnées d'une brique (`meta` hors clés spéciales, filtrées par `meta.show` si présent).
 Réglage par brique `meta.card` (sinon défauts `Settings meta.card.*`) :
-- `when`: `leaf` (brique sans enfant visible = feuille ou groupe replié) | `expanded` (groupe déplié) | `always` | `never` (défaut `never` sauf si `meta.show` existe → `leaf`).
+- `when`: `leaf` (brique sans enfant visible = feuille ou groupe replié) | `expanded` (groupe déplié) | `always` | `never` (défaut : réglage global `meta.card.when` s'il est choisi par l'utilisateur (local ou document ; le « never » intégré/suggéré ne compte pas), sinon `leaf` si `meta.show` existe, sinon `never`).
 - `position`: `top-left|top-right|bottom-left|bottom-right|free` (free = déplaçable, position gardée dans `view.positions`).
 - `maxChars` (défaut 50 par ligne), `maxLines` (défaut 3). Tronqué → `…` + indicateur ; clic = déplier/retronquer.
+Implémentation : `js/meta-cards.js` (`MetaCards.inject`, appelé par `Graph.refresh` après `Style.apply`) ; nœud `card:<id>` ; enfant de la brique si groupe déplié (coin intérieur), sinon collé à l'extérieur du coin ; non-`free` : suit sa brique, exclue de la répulsion, des dispositions, de la recherche et de la sélection ; `free` : position persistée dans `view.positions` sous `card:<id>`. Inspecteur : section « Fiche métadonnées ».
 Rendu dérivé de la brique : fond blanc 50 % (sombre 50 % en thème sombre), bordure couleur de la brique, texte contrasté.
 Conséquence voulue : groupe déplié → les fiches des enfants s'affichent ; groupe replié → les fiches enfants disparaissent avec eux et la fiche du groupe (`leaf`) apparaît.
 

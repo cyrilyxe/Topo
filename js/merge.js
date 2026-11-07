@@ -25,7 +25,7 @@
     const own = Schema.normalizeNode(r);
     const inner = Schema.normalize({ nodes: r.nodes !== undefined ? r.nodes : r.noeuds }).nodes || own.children || [];
     const links = Schema.normalize({ links: r.links !== undefined ? r.links : r.liens }).links || [];
-    return { id: str(r.id), label: own.label, type: own.type, role: own.role, meta: own.meta || {}, inner, links, style: Schema.normalize(r).style };
+    return { id: str(r.id), label: own.label, type: own.type, role: own.role, meta: own.meta || {}, inner, links, style: Schema.normalize(r).style, view: Schema.normalize(r).view, settings: r.settings, trash: r.trash };
   }
 
   function newDir(name, segs) {
@@ -181,6 +181,10 @@
 
     const document = { title: (rootBrick && rootBrick.label) || "Architecture", nodes: top, links: resolveLinks(builder, anomalies) };
     if (rootBrick && rootBrick.style) document.style = rootBrick.style;
+    // Document-level blocks written by the app into the root brick survive rebuilds.
+    ["view", "settings", "trash"].forEach((key) => {
+      if (rootBrick && rootBrick[key]) document[key] = rootBrick[key];
+    });
     return { document, anomalies };
   }
 

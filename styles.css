@@ -541,3 +541,14 @@ button.danger:hover:not(:disabled) { background: var(--danger); filter: brightne
 .trash-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .trash-info { display: flex; flex-direction: column; min-width: 0; }
 .trash-info small { color: var(--text-muted); }
+
+/* Meta cards */
+:root { --card-fill: rgba(255, 255, 255, 0.5); --card-text: #1f2937; }
+:root[data-theme="dark"] { --card-fill: rgba(21, 28, 46, 0.5); --card-text: #e5ecfb; }
+.card-section .card-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; margin: 6px 0; }
+.card-section select, .card-section input[type="number"] { color: var(--text); width: 100%; box-sizing: border-box; }
+
+/* Move tool & project sync */
+:root { --drop-target: #16a34a; }
+:root[data-theme="dark"] { --drop-target: #4ade80; }
+.graph-wrap[data-tool="move"] #cy, .graph-wrap[data-tool="move"] #cy * { cursor: move !important; }

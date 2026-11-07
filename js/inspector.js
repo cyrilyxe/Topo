@@ -12,6 +12,13 @@ const Inspector = {
     this.actions = actions || {};
 
     this.content.addEventListener("click", (event) => {
+      const reset = event.target.closest("button[data-card-reset]");
+
+      if (reset) {
+        this.writeCard(reset.closest(".card-section").dataset.id, null);
+        return;
+      }
+
       const button = event.target.closest("button[data-action]");
 
       if (button) {
@@ -23,6 +30,12 @@ const Inspector = {
 
       if (row) {
         this.actions["link-center"]?.(row.dataset.from, row.dataset.to);
+      }
+    });
+
+    this.content.addEventListener("change", (event) => {
+      if (event.target.dataset && event.target.dataset.card) {
+        this.onCardChange(event.target);
       }
     });
 
@@ -199,7 +212,7 @@ const Inspector = {
   },
 
   metaSection(node) {
-    const hidden = ["show", "afficher", "links", "liens"];
+    const hidden = ["show", "afficher", "links", "liens", "card"];
     const entries = Object.entries(node.meta || {}).filter(([key]) => !hidden.includes(key));
 
     if (!entries.length) {
@@ -215,6 +228,47 @@ const Inspector = {
           `).join("")}
         </ul>
       </section>`;
+  },
+
+  CARD_WHEN: [["never", "Jamais"], ["leaf", "Si feuille ou repliée"], ["expanded", "Si dépliée"], ["always", "Toujours"]],
+  CARD_POSITION: [["top-left", "Haut gauche"], ["top-right", "Haut droite"], ["bottom-left", "Bas gauche"], ["bottom-right", "Bas droite"], ["free", "Libre"]],
+
+  cardSelect(key, options, current) {
+    const items = [["", "Par défaut"]].concat(options)
+      .map(([value, label]) => `<option value="${value}"${value === (current || "") ? " selected" : ""}>${escapeHtml(label)}</option>`)
+      .join("");
+
+    return `<select data-card="${key}">${items}</select>`;
+  },
+
+  cardSection(node) {
+    const card = node.meta && node.meta.card && typeof node.meta.card === "object" ? node.meta.card : {};
+    const number = (key) => `<input type="number" min="1" data-card="${key}" value="${card[key] ?? ""}" placeholder="défaut" />`;
+
+    return `
+      <section class="card-section" data-id="${escapeHtml(node.id)}">
+        <h4>Fiche métadonnées</h4>
+        <div class="card-grid">
+          <label>Quand</label>${this.cardSelect("when", this.CARD_WHEN, card.when)}
+          <label>Position</label>${this.cardSelect("position", this.CARD_POSITION, card.position)}
+          <label>Largeur max (car.)</label>${number("maxChars")}
+          <label>Lignes max</label>${number("maxLines")}
+        </div>
+        <button type="button" data-card-reset="1">Réinitialiser</button>
+      </section>`;
+  },
+
+  writeCard(id, patch) {
+    App.edit("Fiche métadonnées", (text) => DocEdit.updateNode(text, id, { meta: { card: patch } }));
+  },
+
+  onCardChange(field) {
+    const id = field.closest(".card-section").dataset.id;
+    const raw = field.value.trim();
+    const number = field.type === "number";
+    const value = raw === "" ? null : number ? Math.max(1, Math.round(Number(raw)) || 1) : raw;
+
+    this.writeCard(id, { [field.dataset.card]: value });
   },
 
   resourcesSection(node) {
@@ -263,6 +317,7 @@ const Inspector = {
       </section>
 
       ${this.metaSection(node)}
+      ${this.cardSection(node)}
       ${this.resourcesSection(node)}
 
       ${this.linksSection(id, model, isCollapsed, isGroup)}

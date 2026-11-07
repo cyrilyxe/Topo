@@ -112,6 +112,10 @@ const App = {
 
   // Single entry point for graphical actions: fn(text) -> newText, undoable.
   edit(label, fn) {
+    if (typeof Project !== "undefined" && Project.shouldRoute()) {
+      return Project.routeEdit(label, fn);
+    }
+
     const before = this.getText();
 
     try {
@@ -131,6 +135,11 @@ const App = {
   },
 
   undo() {
+    if (typeof Project !== "undefined" && Project.shouldRoute()) {
+      Project.undo();
+      return;
+    }
+
     const label = History.undo();
 
     if (label) {
@@ -139,6 +148,11 @@ const App = {
   },
 
   redo() {
+    if (typeof Project !== "undefined" && Project.shouldRoute()) {
+      Project.redo();
+      return;
+    }
+
     const label = History.redo();
 
     if (label) {
@@ -271,6 +285,11 @@ const App = {
     }
 
     const text = String(ref);
+
+    // Meta cards are derived nodes ("card:<owner>"): keep their saved positions as-is.
+    if (text.startsWith("card:")) {
+      return text;
+    }
 
     if (this.model.byId.has(text)) {
       return text;
