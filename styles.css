@@ -464,3 +464,80 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-2); b
   cursor: pointer;
 }
 .project-edit:hover { color: var(--accent); }
+
+/* Graph toolbar & tree */
+.size-control input[type="range"] { width: 90px; accent-color: var(--accent); }
+.edge-curve {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 3px 6px;
+}
+
+/* ---- settings dialog ---- */
+.settings-row { display: grid; grid-template-columns: 1fr auto auto 28px; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.settings-label code { color: var(--text-muted); font-size: 11.5px; margin-left: 4px; }
+.settings-help { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.settings-control { display: flex; align-items: center; gap: 6px; min-width: 150px; }
+.settings-control output { min-width: 34px; font-size: 12px; color: var(--text-muted); }
+.settings-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; }
+.settings-badge-local { color: var(--accent); border-color: var(--accent); }
+.settings-badge-document { color: var(--warning); border-color: var(--warning); }
+.settings-reset { border: 0; background: transparent; cursor: pointer; color: var(--text-muted); font-size: 15px; }
+.settings-reset[hidden] { display: block; visibility: hidden; }
+.settings-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+/* Style tab v3 */
+.style-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.style-chip { width: 44px; height: 24px; border-radius: 6px; border: 3px solid var(--border); box-sizing: border-box; }
+.style-chip-text { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.style-brush { margin-left: auto; }
+.style-brush.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.style-field { display: flex; flex-direction: column; gap: 4px; }
+.style-row { display: flex; align-items: center; gap: 6px; }
+.prov { color: var(--text-muted); font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 0 6px; margin-left: 4px; }
+.style-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+.style-swatch { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); cursor: pointer; }
+.style-swatch:hover { box-shadow: 0 0 0 2px var(--accent); }
+body.painter-active #graph, body.painter-active .cy-container, body.painter-active canvas { cursor: copy !important; }
+#painter-banner { position: fixed; top: 56px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 6px 14px; border-radius: 16px; background: var(--accent); color: var(--accent-text); font-size: 13px; box-shadow: var(--shadow); pointer-events: none; }
+
+/* Tools & forms */
+.tools-bar { position: absolute; top: 10px; left: 10px; z-index: 5; display: flex; flex-direction: column; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.tool-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; color: var(--text); }
+.tool-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.tool-btn.active:hover:not(:disabled) { background: var(--accent); }
+.tools-help { position: absolute; left: 56px; right: 10px; bottom: 8px; z-index: 5; width: fit-content; max-width: calc(100% - 66px); padding: 4px 10px; font-size: 12px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; pointer-events: none; }
+.tools-overlay { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; pointer-events: none; }
+.tools-overlay[hidden] { display: none; }
+.tools-overlay line { stroke: var(--select); stroke-width: 2.5; stroke-dasharray: 7 5; stroke-linecap: round; }
+.graph-wrap[data-tool="select"] #cy, .graph-wrap[data-tool="select"] #cy * { cursor: default; }
+.graph-wrap[data-tool="hand"] #cy, .graph-wrap[data-tool="hand"] #cy * { cursor: grab !important; }
+.graph-wrap[data-tool="brick"] #cy, .graph-wrap[data-tool="brick"] #cy * { cursor: copy !important; }
+.graph-wrap[data-tool="link"] #cy, .graph-wrap[data-tool="link"] #cy * { cursor: crosshair !important; }
+
+.forms-modal .forms-dialog { width: min(520px, 94vw); }
+.forms-body { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; }
+.forms-field { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-muted); }
+.forms-field input, .forms-field select { color: var(--text); width: 100%; box-sizing: border-box; }
+.forms-field input[readonly] { background: var(--surface-2); color: var(--text-muted); }
+.forms-field small, .forms-hint { color: var(--text-muted); font-size: 11.5px; }
+.forms-meta { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.forms-meta legend { font-size: 12px; color: var(--text-muted); padding: 0 4px; }
+.forms-meta-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.forms-meta-row input { flex: 1 1 0; min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 5px 9px; }
+.forms-error { min-height: 18px; padding: 0 18px; font-size: 12.5px; color: var(--danger); }
+.forms-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 18px 14px; border-top: 1px solid var(--border); }
+.forms-ok { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.forms-ok:hover:not(:disabled) { background: var(--accent); filter: brightness(1.1); }
+button.danger, .forms-ok.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.danger:hover:not(:disabled) { background: var(--danger); filter: brightness(1.1); }
+.forms-message ul { margin: 4px 0; padding-left: 20px; }
+.forms-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+.trash-list { list-style: none; margin: 8px 0 12px; padding: 0; }
+.trash-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.trash-info { display: flex; flex-direction: column; min-width: 0; }
+.trash-info small { color: var(--text-muted); }

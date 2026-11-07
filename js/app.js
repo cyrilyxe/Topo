@@ -22,19 +22,21 @@ function safeUrl(value) {
 
 const App = {
   SCRATCH: "__scratch__",
-  LAYOUTS: ["fcose", "cose", "breadthfirst", "grid", "circle", "concentric"],
+  LAYOUTS: ["fcose", "cose", "breadthfirst", "grid", "circle", "concentric", "tree"],
   LAYOUT_HELP: {
     fcose: "Force dirigée optimisée pour les groupes imbriqués (recommandé).",
     cose: "Force dirigée classique, plus lente, peut faire chevaucher les groupes.",
     breadthfirst: "Arbre hiérarchique par niveaux, suit le sens des liens.",
     grid: "Grille régulière.",
     circle: "Nœuds sur un cercle.",
-    concentric: "Cercles concentriques, les nœuds les plus connectés au centre."
+    concentric: "Cercles concentriques, les nœuds les plus connectés au centre.",
+    tree: "Arbre : briques empilées en colonne, indentées par niveau, dans l'ordre du YAML ; clic = déplier/replier un niveau."
   },
   NEW_DOCUMENT: "title: Nouveau diagramme\nnodes:\n  - id: exemple\n    label: Exemple\n    type: service\n",
 
   model: null,
   collapsed: new Set(),
+  treeSeen: new Set(),
   focus: null,
   name: null,
   savedText: null,
@@ -92,6 +94,7 @@ const App = {
     Inspector.clear();
     StyleUI.nodeId = null;
 
+    History.clear();
     this.updateHeader();
     this.applyNow(true, { initial: true });
     this.updateDirty();
@@ -105,6 +108,57 @@ const App = {
     this.loading = false;
     this.updateDirty();
     this.applyNow(false);
+  },
+
+  // Single entry point for graphical actions: fn(text) -> newText, undoable.
+  edit(label, fn) {
+    const before = this.getText();
+
+    try {
+      const next = fn(before);
+
+      if (typeof next !== "string" || next === before) {
+        return false;
+      }
+
+      History.push(before, label);
+      this.replaceText(next);
+      return true;
+    } catch (error) {
+      this.showMessage(error.message, "error");
+      return false;
+    }
+  },
+
+  undo() {
+    const label = History.undo();
+
+    if (label) {
+      this.showMessage(`Annulé : ${label}.`, "info");
+    }
+  },
+
+  redo() {
+    const label = History.redo();
+
+    if (label) {
+      this.showMessage(`Rétabli : ${label}.`, "info");
+    }
+  },
+
+  updateHistoryMenu(state) {
+    [["menu-undo", "Annuler", state.canUndo, state.undoLabel], ["menu-redo", "Rétablir", state.canRedo, state.redoLabel]].forEach(([id, name, can, label]) => {
+      const button = document.getElementById(id);
+      const kbd = button.querySelector("kbd");
+
+      button.disabled = !can;
+      button.firstChild.textContent = label ? `${name} : ${label}` : name;
+      button.title = label || "";
+
+      if (kbd) {
+        button.appendChild(kbd);
+      }
+    });
   },
 
   showTab(name) {
@@ -278,6 +332,7 @@ const App = {
     this.dropFocus();
     this.model = model;
     Style.setModel(model);
+    Settings.setDocumentFromText(text);
 
     let viewport = null;
 
@@ -357,6 +412,7 @@ const App = {
     this.updateHeader();
     Anomalies.render(model.anomalies);
     StyleUI.refresh();
+    Trash.refresh();
 
     if (Graph.selectedId && model.byId.has(Graph.selectedId)) {
       Inspector.showNode(Graph.selectedId, model, this.collapsed);
@@ -431,6 +487,20 @@ const App = {
       this.collapsed.add(id);
     }
 
+    this.render();
+  },
+
+  // First switch to the outline layout for a document: keep only level 1 expanded.
+  enterTree() {
+    const key = this.docKey();
+
+    if (!this.model || this.treeSeen.has(key)) {
+      return;
+    }
+
+    this.treeSeen.add(key);
+    this.dropFocus();
+    this.model.nodes.filter((node) => node.children.length > 0 && node.parent).forEach((node) => this.collapsed.add(node.id));
     this.render();
   },
 
@@ -566,8 +636,10 @@ const App = {
     StyleUI.show(id);
     Graph.select(id, options.center !== false);
 
-    if (options.tab) {
-      this.showTab("inspector");
+    const tab = options.tab === true ? Settings.get("selection.tab") : options.tab;
+
+    if (tab === "inspector" || tab === "style") {
+      this.showTab(tab);
     }
   },
 
@@ -725,8 +797,10 @@ const App = {
     }
 
     actions.push(
+      { label: "Modifier…", run: () => Tools.editNode(id) },
+      { label: "Ajouter un enfant…", run: () => Tools.addBrick(id) },
       { label: "Afficher la fiche", run: () => this.showCard(id) },
-      { label: "Inspecter", run: () => this.inspectNode(id, { tab: true }) },
+      { label: "Inspecter", run: () => this.inspectNode(id, { tab: "inspector" }) },
       {
         label: "Style",
         run: () => {
@@ -749,6 +823,9 @@ const App = {
       });
     });
 
+    actions.push(...Tools.planActions(id, position));
+    actions.push({ separator: true, label: "Supprimer…", run: () => Tools.requestDelete(Tools.selection().nodes.includes(id) ? undefined : [id]) });
+
     this.openMenu(position, node.label || id, actions);
   },
 
@@ -762,17 +839,30 @@ const App = {
     const source = edge.source().id();
     const target = edge.target().id();
 
-    this.openMenu(position, "Lien", [
+    const actions = [
       { label: "Voir l’origine", run: () => Graph.select(source) },
       { label: "Voir la cible", run: () => Graph.select(target) },
       { label: "Inspecter l’origine", run: () => this.inspectNode(source, { tab: true }) },
       { label: "Inspecter la cible", run: () => this.inspectNode(target, { tab: true }) }
-    ]);
+    ];
+
+    if (!edge.data("isMeta")) {
+      actions.push({ separator: true, label: "Modifier le lien…", run: () => Tools.editLink(edgeId) });
+    }
+
+    actions.push({
+      separator: edge.data("isMeta"),
+      label: edge.data("isMeta") ? "Supprimer les liens réels…" : "Supprimer le lien…",
+      run: () => (edge.selected() ? Tools.requestDelete() : Tools.requestDelete([], [edgeId]))
+    });
+
+    this.openMenu(position, "Lien", actions);
   },
 
   backgroundMenu(position) {
     this.openMenu(position, "Diagramme", [
-      { label: "Zoom avant", run: () => Graph.zoomIn() },
+      { label: "Nouvelle brique racine…", run: () => Tools.addBrick(null) },
+      { separator: true, label: "Zoom avant", run: () => Graph.zoomIn() },
       { label: "Zoom arrière", run: () => Graph.zoomOut() },
       { label: "Ajuster la vue", run: () => Graph.fit() },
       { separator: true, label: "Tout replier", run: () => this.collapseAll() },
@@ -948,6 +1038,9 @@ const App = {
       "export-json": () => this.exportAs("json"),
       "export-mermaid": () => this.exportAs("mermaid"),
       "apply": () => this.applyNow(true),
+      "undo": () => this.undo(),
+      "redo": () => this.redo(),
+      "settings": () => SettingsUI.open(),
       "relayout": () => {
         Graph.relayout(this.layout);
         this.schedulePersistView();
@@ -1080,6 +1173,11 @@ const App = {
     this.els.layoutSelect.addEventListener("change", () => {
       this.layout = this.els.layoutSelect.value;
       this.updateLayoutHelp();
+
+      if (this.layout === "tree") {
+        this.enterTree();
+      }
+
       Graph.relayout(this.layout);
       this.schedulePersistView();
     });
@@ -1088,13 +1186,29 @@ const App = {
 
     const sizeInput = document.getElementById("node-size");
 
-    sizeInput.value = this.read("topo:size") || 1;
+    const applySize = () => {
+      sizeInput.value = Settings.get("nodes.size");
+      Style.setUserScale(sizeInput.value);
+      Graph.applyStyle();
+    };
+
+    sizeInput.value = Settings.get("nodes.size");
     Style.setUserScale(sizeInput.value);
 
     sizeInput.addEventListener("input", () => {
-      Style.setUserScale(sizeInput.value);
-      this.store("topo:size", sizeInput.value);
-      Graph.applyStyle();
+      Settings.set("nodes.size", sizeInput.value);
+
+      if (Settings.source("nodes.size") === "document") {
+        this.showMessage("La taille est imposée par le document (Vue > Réglages).", "warning");
+      }
+
+      applySize();
+    });
+
+    Settings.onChange((keys) => {
+      if (keys.includes("nodes.size")) {
+        applySize();
+      }
     });
 
     this.els.search.addEventListener("input", () => this.runSearch(true));
@@ -1190,7 +1304,7 @@ const App = {
     );
 
     Graph.init(document.getElementById("cy"), {
-      onNodeTap: (id) => this.inspectNode(id, { tab: true, center: false }),
+      onNodeTap: (id) => !Tools.onNodeTap() && this.inspectNode(id, { tab: true, center: false }),
       onNodeDblTap: (id) => this.toggleCollapse(id),
       onBackgroundTap: () => this.exitFocus(),
       onNodeMenu: (id, position) => this.nodeMenu(id, position),
@@ -1205,6 +1319,8 @@ const App = {
     });
 
     Graph.cy.on("render", () => this.moveCard());
+    Trash.init();
+    Tools.init();
 
     Inspector.init({
       center: (id) => this.inspectNode(id),
@@ -1230,9 +1346,15 @@ const App = {
       }
     });
 
+    Settings.init();
+    History.bind({ get: () => this.getText(), set: (text) => this.replaceText(text) });
+    History.onChange((state) => this.updateHistoryMenu(state));
+    History.installShortcuts();
+
     StyleUI.init();
     Anomalies.init();
     Help.init();
+    SettingsUI.init();
     this.initSplitter();
     this.bindUi();
 

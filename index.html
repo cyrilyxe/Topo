@@ -89,6 +89,9 @@
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Vue ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
+          <button type="button" role="menuitem" data-cmd="undo" id="menu-undo" disabled>Annuler<kbd>Ctrl+Z</kbd></button>
+          <button type="button" role="menuitem" data-cmd="redo" id="menu-redo" disabled>Rétablir<kbd>Ctrl+Y</kbd></button>
+          <hr />
           <label class="menu-check">
             <input id="opt-save-view" type="checkbox" checked />
             Enregistrer la vue dans le fichier
@@ -96,6 +99,8 @@
           <button type="button" role="menuitem" data-cmd="apply">Appliquer le YAML maintenant</button>
           <button type="button" role="menuitem" data-cmd="relayout">Recalculer la disposition</button>
           <button type="button" role="menuitem" data-cmd="reset-view">Réinitialiser la vue</button>
+          <hr />
+          <button type="button" role="menuitem" data-cmd="settings">Réglages…</button>
         </div>
       </div>
     </nav>
@@ -115,6 +120,7 @@
         <button type="button" class="tab" role="tab" data-tab="style">Style</button>
         <button type="button" class="tab" role="tab" data-tab="anomalies">Anomalies <span id="anomaly-badge" class="badge" hidden>0</span></button>
         <button type="button" class="tab" role="tab" data-tab="project" id="tab-project" hidden>Projet</button>
+        <button type="button" class="tab" role="tab" data-tab="trash" id="tab-trash" hidden>Corbeille <span id="trash-badge" class="badge" hidden>0</span></button>
       </div>
 
       <div id="pane-editor" class="pane active" role="tabpanel">
@@ -139,6 +145,10 @@
         <div id="project-content" class="pane-content"></div>
       </div>
 
+      <div id="pane-trash" class="pane" role="tabpanel" hidden>
+        <div id="trash-content" class="pane-content"></div>
+      </div>
+
       <div id="project-banner" class="project-banner" hidden></div>
       <div id="message" class="message" role="status"></div>
     </section>
@@ -151,6 +161,18 @@
           Taille
           <input id="node-size" type="range" min="0.6" max="1.6" step="0.05" value="1" />
         </label>
+
+        <label class="size-control" title="Opacité des liens">
+          Liens
+          <input id="edge-opacity" type="range" min="0.15" max="1" step="0.05" value="1" />
+        </label>
+
+        <select id="edge-curve" class="edge-curve" aria-label="Forme des liens" title="Forme des liens : courbes, angle droit, droites ou angle arrondi">
+          <option value="bezier">Courbes</option>
+          <option value="taxi">Angle droit</option>
+          <option value="straight">Droites</option>
+          <option value="round-taxi">Angle arrondi</option>
+        </select>
 
         <button id="btn-zoom-in" type="button" class="icon-btn" title="Zoom avant" aria-label="Zoom avant">＋</button>
         <button id="btn-zoom-out" type="button" class="icon-btn" title="Zoom arrière" aria-label="Zoom arrière">－</button>
@@ -167,6 +189,7 @@
             <option value="grid" title="Grille régulière">grid</option>
             <option value="circle" title="Nœuds sur un cercle">circle</option>
             <option value="concentric" title="Cercles concentriques, les nœuds les plus connectés au centre">concentric</option>
+            <option value="tree" title="Arbre : briques empilées en colonne, indentées par niveau, dans l'ordre du YAML ; clic = déplier/replier un niveau">arbre</option>
           </select>
           <span id="layout-help" class="layout-help" tabindex="0" title="">ⓘ</span>
         </label>
@@ -175,6 +198,8 @@
       <div class="graph-wrap">
         <div id="cy"></div>
         <div id="meta-card" class="meta-card" hidden></div>
+        <div id="tools-bar" class="tools-bar" role="toolbar" aria-label="Outils d’édition" aria-orientation="vertical"></div>
+        <div id="tools-help" class="tools-help" aria-live="polite"></div>
       </div>
 
       <div class="legend">
@@ -205,17 +230,27 @@
     </div>
   </div>
 
+  <script src="vendor/yaml.js"></script>
   <script src="js/schema.js"></script>
   <script src="js/model.js"></script>
+  <script src="js/doc-edit.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/settings.js"></script>
   <script src="js/merge.js"></script>
   <script src="js/editor.js"></script>
   <script src="js/files.js"></script>
   <script src="js/style.js"></script>
+  <script src="js/repulsion.js"></script>
+  <script src="js/tree-layout.js"></script>
   <script src="js/graph.js"></script>
   <script src="js/inspector.js"></script>
   <script src="js/style-ui.js"></script>
   <script src="js/anomalies.js"></script>
   <script src="js/help.js"></script>
+  <script src="js/forms.js"></script>
+  <script src="js/trash.js"></script>
+  <script src="js/tools.js"></script>
+  <script src="js/settings-ui.js"></script>
   <script src="js/project.js"></script>
   <script src="js/app.js"></script>
 </body>

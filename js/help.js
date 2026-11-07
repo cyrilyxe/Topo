@@ -73,6 +73,19 @@ const Help = {
     }
   },
 
+  buildEditing() {
+    return `
+      <h3>Édition graphique</h3>
+      <ul>
+        <li><strong>Outils</strong> (barre à gauche du graphe) : Sélection (<kbd>V</kbd>), Main (<kbd>H</kbd> ou <kbd>Espace</kbd> maintenu), Brique (<kbd>B</kbd> : clic sur une brique = nouvel enfant, sur le fond = brique racine), Lien (<kbd>L</kbd> : glisser d’une brique à une autre).</li>
+        <li><strong>Sélection</strong> : clic, <kbd>Maj</kbd>/<kbd>Ctrl</kbd>+clic pour ajouter ou retirer, glisser sur le fond pour un rectangle. Le style s’applique à toute la sélection.</li>
+        <li><strong>Suppression</strong> : <kbd>Suppr</kbd> ou menu contextuel. Les briques vont dans l’onglet <em>Corbeille</em> (bloc <code>trash:</code> du YAML) d’où on peut les restaurer.</li>
+        <li><strong>Plans</strong> : menu contextuel d’une brique, <kbd>Ctrl+]</kbd> / <kbd>Ctrl+[</kbd> (avancer/reculer), avec <kbd>Maj</kbd> pour premier plan / arrière-plan. Une brique ne passe jamais sous son parent : l’action propose alors de l’appliquer au parent.</li>
+        <li><strong>Modifier</strong> : menu contextuel d’une brique ou d’un lien (« Modifier… »).</li>
+        <li><strong>Annuler / rétablir</strong> : <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> pour chaque action graphique.</li>
+      </ul>`;
+  },
+
   build() {
     const schema = typeof Schema !== "undefined" ? Schema : null;
     let html = "";
@@ -112,6 +125,7 @@ const Help = {
       html += "<p class=\"empty\">L’aide détaillée du schéma est indisponible (js/schema.js non chargé).</p>";
     }
 
+    html += this.buildEditing();
     html += "<h3>Raccourcis clavier</h3>";
 
     if (schema && Array.isArray(schema.SHORTCUTS)) {

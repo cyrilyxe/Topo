@@ -7,14 +7,53 @@ const Graph = {
   pinned: false,
   selectedId: null,
   focusSets: null,
+  model: null,
+  layoutName: "fcose",
+  curveChosen: false,
+  mem: {},
 
   LAYOUTS: {
+    tree: {},
     fcose: { quality: "proof", randomize: true, nodeSeparation: 90, idealEdgeLength: 110, nodeRepulsion: 6500, packComponents: true, tile: true },
     cose: { idealEdgeLength: 120, nodeOverlap: 35, randomize: true },
     breadthfirst: { directed: true, spacingFactor: 1.1 },
     grid: { condense: false },
     circle: {},
     concentric: { minNodeSpacing: 40 }
+  },
+
+  setting(key, fallback) {
+    const value = typeof Settings !== "undefined" ? Settings.get(key) : undefined;
+
+    return value ?? this.mem[key] ?? fallback;
+  },
+
+  writeSetting(key, value) {
+    this.mem[key] = value;
+
+    if (typeof Settings !== "undefined") {
+      Settings.set(key, value);
+    } else {
+      this.applyTheme();
+    }
+  },
+
+  // The outline layout defaults to right-angle links unless the user picked a shape.
+  curveStyle() {
+    const curve = this.setting("edges.curve", "bezier");
+    const explicit = this.curveChosen || curve !== "bezier";
+
+    return this.layoutName === "tree" && !explicit ? "taxi" : curve;
+  },
+
+  edgeCurveRules() {
+    const curve = this.curveStyle();
+
+    if (curve === "taxi" || curve === "round-taxi") {
+      return { "curve-style": curve, "taxi-direction": "auto", "taxi-turn": "50%", "taxi-radius": curve === "round-taxi" ? 14 : 0 };
+    }
+
+    return { "curve-style": curve === "straight" ? "straight" : "bezier" };
   },
 
   token(name, fallback) {
@@ -76,6 +115,7 @@ const Graph = {
       default: t("--node-default", "#0369a1")
     };
 
+    const edgeOpacity = Math.min(1, Math.max(0.15, Number(this.setting("edges.opacity", 1)) || 1));
     const style = [
       {
         selector: "node",
@@ -152,7 +192,8 @@ const Graph = {
         selector: "edge",
         style: {
           width: 2,
-          "curve-style": "bezier",
+          ...this.edgeCurveRules(),
+          opacity: edgeOpacity,
           "target-arrow-shape": "triangle",
           "arrow-scale": 0.85,
           "z-index-compare": "manual",
@@ -182,7 +223,7 @@ const Graph = {
       { selector: "node[ruleBorder]", style: { "border-color": "data(ruleBorder)" } },
       { selector: "node[ruleOpacity >= 0]", style: { opacity: "data(ruleOpacity)" } },
       { selector: "node.dim, node.focus-dim", style: { opacity: 0.18 } },
-      { selector: "edge.dim, edge.focus-dim", style: { opacity: 0.08 } },
+      { selector: "edge.dim, edge.focus-dim", style: { opacity: 0.08 * edgeOpacity } },
       {
         selector: "node.search-hit",
         style: { "border-color": t("--search", "#ec4899"), "border-width": 4 }
@@ -211,6 +252,14 @@ const Graph = {
       {
         selector: "node.selected-node",
         style: { "border-color": t("--select", "#7c3aed"), "border-width": 4, "border-style": "solid" }
+      },
+      {
+        selector: "node:selected",
+        style: { "border-color": t("--select", "#7c3aed"), "border-width": 4, "border-style": "solid", "underlay-color": t("--select", "#7c3aed"), "underlay-opacity": 0.22, "underlay-padding": 6 }
+      },
+      {
+        selector: "edge:selected",
+        style: { "line-color": t("--select", "#7c3aed"), "target-arrow-color": t("--select", "#7c3aed"), width: 4, "z-index": 960 }
       },
       {
         selector: "node.link-hover",
@@ -252,8 +301,21 @@ const Graph = {
     const cy = this.cy;
     const point = (event) => ({ x: event.originalEvent.clientX, y: event.originalEvent.clientY });
 
-    cy.on("tap", "node", (event) => this.callbacks.onNodeTap?.(event.target.id()));
-    cy.on("dbltap", "node", (event) => this.callbacks.onNodeDblTap?.(event.target.id()));
+    cy.on("tap", "node", (event) => {
+      const node = event.target;
+
+      this.callbacks.onNodeTap?.(node.id());
+
+      if (this.layoutName === "tree" && this.selectToolActive() && (node.isParent() || node.hasClass("collapsed"))) {
+        this.callbacks.onNodeDblTap?.(node.id());
+      }
+    });
+
+    cy.on("dbltap", "node", (event) => {
+      if (this.layoutName !== "tree" && this.selectToolActive()) {
+        this.callbacks.onNodeDblTap?.(event.target.id());
+      }
+    });
     cy.on("cxttap", "node", (event) => this.callbacks.onNodeMenu?.(event.target.id(), point(event)));
     cy.on("cxttap", "edge", (event) => this.callbacks.onEdgeMenu?.(event.target.id(), point(event)));
 
@@ -271,14 +333,57 @@ const Graph = {
 
     cy.on("drag", "node", (event) => this.callbacks.onNodeMove?.(event.target.id()));
 
-    cy.on("dragfree", "node", () => {
+    cy.on("dragfree", "node", (event) => {
       this.pinned = true;
       this.callbacks.onViewChange?.("drag");
+
+      if (this.setting("drop.repulsion", true) && typeof Repulsion !== "undefined") {
+        Repulsion.apply(event.target, (moved) => moved && this.callbacks.onViewChange?.("drag"));
+      }
     });
 
     cy.on("viewport", () => this.callbacks.onViewChange?.("viewport"));
 
+    this.bindToolbar();
+
+    if (typeof Settings !== "undefined" && Settings.onChange) {
+      Settings.onChange(() => {
+        this.syncToolbar();
+        this.applyTheme();
+      });
+    }
+
     return cy;
+  },
+
+  selectToolActive() {
+    return typeof Tools === "undefined" || !Tools.cy || Tools.current === "select";
+  },
+
+  bindToolbar() {
+    const opacity = document.getElementById("edge-opacity");
+    const curve = document.getElementById("edge-curve");
+
+    this.syncToolbar();
+
+    opacity?.addEventListener("input", () => this.writeSetting("edges.opacity", Number(opacity.value)));
+    curve?.addEventListener("change", () => {
+      this.curveChosen = true;
+      this.writeSetting("edges.curve", curve.value);
+    });
+  },
+
+  syncToolbar() {
+    const opacity = document.getElementById("edge-opacity");
+    const curve = document.getElementById("edge-curve");
+
+    if (opacity) {
+      opacity.value = this.setting("edges.opacity", 1);
+    }
+
+    if (curve) {
+      curve.value = this.setting("edges.curve", "bezier");
+    }
   },
 
   applyTheme() {
@@ -315,6 +420,14 @@ const Graph = {
   refresh(elements, model, opts = {}) {
     const cy = this.cy;
     const previous = {};
+    const selection = !opts.initial && typeof Tools !== "undefined" ? Tools.snapshot() : null;
+
+    this.model = model;
+
+    if (opts.layout && opts.layout !== this.layoutName) {
+      this.layoutName = opts.layout;
+      cy.style(this.buildStyle());
+    }
 
     if (!opts.initial) {
       cy.nodes().forEach((node) => {
@@ -358,6 +471,8 @@ const Graph = {
 
     if (fullLayout) {
       this.runLayout(opts.layout || "fcose", { fit: !opts.viewport });
+    } else if (opts.layout === "tree") {
+      this.runLayout("tree", { fit: false });
     }
 
     if (opts.viewport && Number.isFinite(opts.viewport.zoom) && opts.viewport.pan) {
@@ -368,6 +483,10 @@ const Graph = {
 
     if (this.selectedId) {
       cy.getElementById(this.selectedId).addClass("selected-node");
+    }
+
+    if (selection) {
+      Tools.restore(selection);
     }
 
     if (this.focusSets) {
@@ -434,7 +553,59 @@ const Graph = {
     });
   },
 
+  runTree(fit) {
+    const cy = this.cy;
+    const model = this.model;
+
+    if (!model) {
+      return;
+    }
+
+    const { positions, widths } = TreeLayout.compute(model, {
+      indent: this.setting("tree.indent", 28),
+      kind: (id) => {
+        const node = cy.getElementById(id);
+
+        if (node.empty()) {
+          return null;
+        }
+
+        return node.isParent() ? "group" : "leaf";
+      },
+      size: (id) => {
+        const node = cy.getElementById(id);
+
+        return { w: node.outerWidth(), h: node.outerHeight() };
+      },
+      group: (id) => {
+        const node = cy.getElementById(id);
+        const font = node.numericStyle("font-size");
+        const chars = String(node.data("display") || "").length;
+        const lines = Math.max(1, Math.ceil((chars * font * 0.6) / 150));
+
+        return { pad: node.numericStyle("padding"), labelH: font * 1.4 * lines };
+      }
+    });
+
+    cy.batch(() => {
+      Object.entries(widths).forEach(([id, width]) => {
+        cy.getElementById(id).style("width", width);
+      });
+
+      Object.entries(positions).forEach(([id, point]) => cy.getElementById(id).position(point));
+    });
+
+    if (fit) {
+      cy.fit(undefined, 45);
+    }
+  },
+
   runLayout(name, options = {}) {
+    if (name === "tree" && typeof TreeLayout !== "undefined") {
+      this.runTree(options.fit !== false);
+      return;
+    }
+
     let base = this.LAYOUTS[name] ? name : "fcose";
 
     if (base === "fcose" && typeof cytoscapeFcose === "undefined") {
@@ -449,6 +620,12 @@ const Graph = {
   },
 
   relayout(name) {
+    if (name !== this.layoutName) {
+      this.layoutName = name;
+      this.cy.style(this.buildStyle());
+      this.applyStyle();
+    }
+
     this.saved = {};
     this.pinned = false;
     this.runLayout(name, { fit: true });
@@ -598,6 +775,11 @@ const Graph = {
 
     if (node.nonempty()) {
       node.addClass("selected-node");
+
+      if (!node.selected()) {
+        this.cy.elements(":selected").unselect();
+        node.select();
+      }
 
       if (center) {
         this.centerOn(id);

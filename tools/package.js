@@ -6,7 +6,7 @@ const zlib = require("zlib");
 
 const ROOT = path.join(__dirname, "..");
 const YAML_URL = "https://unpkg.com/js-yaml@4.1.1/dist/js-yaml.js";
-const INCLUDE = ["index.html", "styles.css", "js", "tools", "vendor", "docs", "examples", "README.md", "package.json"];
+const INCLUDE = ["index.html", "styles.css", "topo.config.json", "js", "tools", "vendor", "docs", "examples", "README.md", "package.json"];
 
 function readIndex() {
   return fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
