@@ -9,7 +9,9 @@ const Graph = {
   focusSets: null,
   model: null,
   layoutName: "fcose",
-  curveChosen: false,
+  edgesPending: false,
+  cards: [],
+  treeOrder: {},
   mem: {},
 
   LAYOUTS: {
@@ -38,22 +40,138 @@ const Graph = {
     }
   },
 
-  // The outline layout defaults to right-angle links unless the user picked a shape.
-  curveStyle() {
-    const curve = this.setting("edges.curve", "bezier");
-    const explicit = this.curveChosen || curve !== "bezier";
+  EDGE_KEYS: ["curve-style", "source-endpoint", "target-endpoint", "taxi-direction", "taxi-turn", "control-point-distances", "control-point-weights", "segment-weights", "segment-distances", "segment-radius", "edge-distances"],
+  SIDES: {
+    right: { endpoint: "50% 0%" },
+    left: { endpoint: "-50% 0%" },
+    bottom: { endpoint: "0% 50%" },
+    top: { endpoint: "0% -50%" }
+  },
+  SIDE_OFFSET: 28,
 
-    return this.layoutName === "tree" && !explicit ? "taxi" : curve;
+  // bezier = "auto": straight for a single link; the outline layout turns it into right-angle links.
+  edgeMode() {
+    const curve = this.setting("edges.curve", "bezier");
+    const mode = this.layoutName === "tree" && curve === "bezier" ? "taxi" : curve;
+    const chosen = this.setting("edges.side", "auto");
+    const angled = mode === "taxi" || mode === "round-taxi" || mode === "curved";
+    const side = chosen === "auto" ? (this.layoutName === "tree" && angled ? "right" : "auto") : (angled ? chosen : "auto");
+
+    return { mode, side };
   },
 
   edgeCurveRules() {
-    const curve = this.curveStyle();
+    const { mode } = this.edgeMode();
 
-    if (curve === "taxi" || curve === "round-taxi") {
-      return { "curve-style": curve, "taxi-direction": "auto", "taxi-turn": "50%", "taxi-radius": curve === "round-taxi" ? 14 : 0 };
+    if (mode === "taxi" || mode === "round-taxi") {
+      return { "curve-style": "taxi", "taxi-direction": "auto", "taxi-turn": "50%", "taxi-radius": mode === "round-taxi" ? 14 : 0 };
     }
 
-    return { "curve-style": curve === "straight" ? "straight" : "bezier" };
+    if (mode === "curved") {
+      return { "curve-style": "unbundled-bezier", "control-point-distances": [40], "control-point-weights": [0.5] };
+    }
+
+    return { "curve-style": mode === "straight" ? "straight" : "bezier" };
+  },
+
+  // Anchor of a node side, in model coordinates.
+  sideAnchor(node, side) {
+    const p = node.position();
+    const w = node.outerWidth() / 2;
+    const h = node.outerHeight() / 2;
+
+    return { right: { x: p.x + w, y: p.y }, left: { x: p.x - w, y: p.y }, bottom: { x: p.x, y: p.y + h }, top: { x: p.x, y: p.y - h } }[side];
+  },
+
+  // Per-edge geometry: leave and enter by `side`, going round the outside of the boxes.
+  edgeGeometry(edge, mode, side) {
+    const source = edge.source();
+    const target = edge.target();
+
+    if (source.id() === target.id()) {
+      return null;
+    }
+
+    const sp = source.position();
+    const tp = target.position();
+
+    if (side === "auto") {
+      const length = Math.hypot(tp.x - sp.x, tp.y - sp.y);
+
+      return mode === "curved" && length > 1
+        ? { "curve-style": "unbundled-bezier", "control-point-distances": [Math.min(90, Math.max(24, length * 0.25))], "control-point-weights": [0.5] }
+        : null;
+    }
+
+    const a = this.sideAnchor(source, side);
+    const b = this.sideAnchor(target, side);
+    const info = this.SIDES[side];
+    const horizontal = side === "right" || side === "left";
+    const sign = side === "right" || side === "bottom" ? 1 : -1;
+    const axis = horizontal ? "x" : "y";
+    const turn = sign > 0 ? Math.max(a[axis], b[axis]) + this.SIDE_OFFSET : Math.min(a[axis], b[axis]) - this.SIDE_OFFSET;
+    const css = { "source-endpoint": info.endpoint, "target-endpoint": info.endpoint, "edge-distances": "node-position" };
+    const control = (point) => (horizontal ? { x: turn, y: point.y } : { x: point.x, y: turn });
+    const vx = tp.x - sp.x;
+    const vy = tp.y - sp.y;
+    const length = Math.hypot(vx, vy);
+
+    if (length < 1) {
+      return null;
+    }
+
+    const project = (point) => ({
+      w: ((point.x - sp.x) * vx + (point.y - sp.y) * vy) / (length * length),
+      d: ((point.y - sp.y) * vx - (point.x - sp.x) * vy) / length
+    });
+    const points = [control(a), control(b)].map(project);
+    const weights = points.map((point) => point.w);
+    const distances = points.map((point) => point.d);
+
+    if (mode === "curved") {
+      return { ...css, "curve-style": "unbundled-bezier", "control-point-weights": weights, "control-point-distances": distances };
+    }
+
+    return {
+      ...css,
+      "curve-style": mode === "round-taxi" ? "round-segments" : "segments",
+      "segment-weights": weights,
+      "segment-distances": distances,
+      "segment-radius": mode === "round-taxi" ? 14 : 0
+    };
+  },
+
+  updateEdges() {
+    if (!this.cy) {
+      return;
+    }
+
+    const { mode, side } = this.edgeMode();
+    const custom = side !== "auto" || mode === "curved";
+
+    this.cy.batch(() => {
+      this.cy.edges().forEach((edge) => {
+        edge.removeStyle(this.EDGE_KEYS.join(" "));
+
+        const css = custom ? this.edgeGeometry(edge, mode, side) : null;
+
+        if (css) {
+          edge.style(css);
+        }
+      });
+    });
+  },
+
+  scheduleEdges() {
+    if (this.edgesPending || typeof requestAnimationFrame === "undefined") {
+      return;
+    }
+
+    this.edgesPending = true;
+    requestAnimationFrame(() => {
+      this.edgesPending = false;
+      this.updateEdges();
+    });
   },
 
   token(name, fallback) {
@@ -200,8 +318,8 @@ const Graph = {
           "font-size": 10,
           "font-weight": 400,
           shape: "round-rectangle",
-          width: "label",
-          height: "label",
+          width: "data(w)",
+          height: "data(h)",
           padding: "6px",
           "text-wrap": "wrap",
           "text-max-width": "data(maxWidth)",
@@ -255,9 +373,7 @@ const Graph = {
       {
         selector: "node.highlighted",
         style: {
-          "border-color": t("--highlight", "#f59e0b"),
           "border-width": 4,
-          "border-style": "solid",
           "underlay-color": t("--highlight", "#f59e0b"),
           "underlay-opacity": 0.35,
           "underlay-padding": 8,
@@ -274,12 +390,17 @@ const Graph = {
         }
       },
       {
-        selector: "node.selected-node",
-        style: { "border-color": t("--select", "#7c3aed"), "border-width": 4, "border-style": "solid" }
+        selector: "node.selected-node, node:selected",
+        style: { "overlay-color": t("--selection", "#7c3aed"), "overlay-opacity": 0.22, "overlay-padding": 7, "overlay-shape": "round-rectangle" }
       },
       {
-        selector: "node:selected",
-        style: { "border-color": t("--select", "#7c3aed"), "border-width": 4, "border-style": "solid", "underlay-color": t("--select", "#7c3aed"), "underlay-opacity": 0.22, "underlay-padding": 6 }
+        selector: "node.tool-hover",
+        style: {
+          "underlay-color": t("--hover-aura", "#38bdf8"),
+          "underlay-opacity": 0.28,
+          "underlay-padding": 7,
+          "underlay-shape": "round-rectangle"
+        }
       },
       {
         selector: "edge:selected",
@@ -318,8 +439,7 @@ const Graph = {
     this.cy = cytoscape({
       container,
       elements: [],
-      style: this.buildStyle(),
-      wheelSensitivity: 0.25
+      style: this.buildStyle()
     });
 
     const cy = this.cy;
@@ -346,11 +466,11 @@ const Graph = {
         this.callbacks.onNodeDblTap?.(event.target.id());
       }
     });
-    cy.on("cxttap", "node", (event) => !event.target.hasClass("meta-card") && this.callbacks.onNodeMenu?.(event.target.id(), point(event)));
-    cy.on("cxttap", "edge", (event) => this.callbacks.onEdgeMenu?.(event.target.id(), point(event)));
+    cy.on("cxttap", "node", (event) => this.menuAllowed() && !event.target.hasClass("meta-card") && this.callbacks.onNodeMenu?.(event.target.id(), point(event)));
+    cy.on("cxttap", "edge", (event) => this.menuAllowed() && this.callbacks.onEdgeMenu?.(event.target.id(), point(event)));
 
     cy.on("cxttap", (event) => {
-      if (event.target === cy) {
+      if (event.target === cy && this.menuAllowed()) {
         this.callbacks.onBackgroundMenu?.(point(event));
       }
     });
@@ -361,16 +481,13 @@ const Graph = {
       }
     });
 
-    cy.on("drag", "node", (event) => !event.target.hasClass("meta-card") && this.callbacks.onNodeMove?.(event.target.id()));
-
-    cy.on("dragfree", "node", (event) => {
-      this.pinned = true;
-      this.callbacks.onViewChange?.("drag");
-
-      if (this.setting("drop.repulsion", true) && typeof Repulsion !== "undefined") {
-        Repulsion.apply(event.target, (moved) => moved && this.callbacks.onViewChange?.("drag"));
-      }
+    cy.on("grab", "node", (event) => this.onGrab(event.target));
+    cy.on("drag", "node", (event) => {
+      this.lockTreeX(event.target);
+      !event.target.hasClass("meta-card") && this.callbacks.onNodeMove?.(event.target.id());
     });
+    cy.on("dragfree", "node", (event) => this.onDrop(event.target));
+    cy.on("position", "node", (event) => !event.target.hasClass("meta-card") && this.scheduleEdges());
 
     cy.on("viewport", () => this.callbacks.onViewChange?.("viewport"));
     MetaCards.bind(cy);
@@ -391,6 +508,69 @@ const Graph = {
     return cy;
   },
 
+  treeActive(node) {
+    return this.layoutName === "tree" && !node.hasClass("meta-card");
+  },
+
+  onGrab(node) {
+    if (node.hasClass("meta-card")) {
+      return;
+    }
+
+    Repulsion.remember(node);
+    node.scratch("_left", Repulsion.boxOf(node, false).x1);
+  },
+
+  // Outline layout: a dragged box only moves vertically.
+  lockTreeX(node) {
+    const left = node.scratch("_left");
+
+    if (!this.treeActive(node) || left === undefined) {
+      return;
+    }
+
+    const dx = Repulsion.boxOf(node, false).x1 - left;
+
+    if (Math.abs(dx) > 0.01) {
+      Repulsion.leavesOf(node).forEach((leaf) => leaf.position("x", leaf.position("x") - dx));
+    }
+  },
+
+  onDrop(node) {
+    this.pinned = true;
+    this.callbacks.onViewChange?.("drag");
+
+    if (this.treeActive(node)) {
+      this.treeDrop(node);
+      return;
+    }
+
+    if (this.setting("drop.repulsion", true) && typeof Repulsion !== "undefined") {
+      Repulsion.apply(node, (moved, ok) => {
+        if (!ok && typeof App !== "undefined" && App.showMessage) {
+          App.showMessage("Pas de place libre ici", "warning");
+        }
+
+        moved && this.callbacks.onViewChange?.("drag");
+      });
+    }
+  },
+
+  // Visual reordering: siblings are re-sorted by their vertical position, then the column is packed again.
+  treeDrop(node) {
+    const parent = node.data("parent") || "";
+    const centre = (item) => {
+      const box = Repulsion.boxOf(item, false);
+
+      return box.y1 + box.y2;
+    };
+    const siblings = this.cy.nodes().filter((item) => !item.hasClass("meta-card") && (item.data("parent") || "") === parent);
+
+    this.treeOrder[parent] = siblings.sort((a, b) => centre(a) - centre(b)).map((item) => item.id());
+    this.runTree(false);
+    this.callbacks.onViewChange?.("drag");
+  },
+
   selectToolActive() {
     return typeof Tools === "undefined" || !Tools.cy || Tools.current === "select";
   },
@@ -403,7 +583,6 @@ const Graph = {
 
     opacity?.addEventListener("input", () => this.writeSetting("edges.opacity", Number(opacity.value)));
     curve?.addEventListener("change", () => {
-      this.curveChosen = true;
       this.writeSetting("edges.curve", curve.value);
     });
   },
@@ -428,6 +607,12 @@ const Graph = {
 
     this.cy.style(this.buildStyle());
     this.applyStyle();
+
+    if (this.layoutName === "tree" && this.model) {
+      this.runTree(false);
+    }
+
+    this.updateEdges();
   },
 
   clear() {
@@ -476,6 +661,8 @@ const Graph = {
 
     const styled = Style.apply(elements, model);
     const cards = MetaCards.inject(styled.elements, model, known);
+
+    this.cards = cards;
     const nodes = styled.elements.filter((element) => element.group === "nodes");
     const parents = new Set(nodes.map((element) => element.data.parent).filter(Boolean));
     const parentOf = new Map(nodes.map((element) => [element.data.id, element.data.parent]));
@@ -525,6 +712,8 @@ const Graph = {
     } else if (opts.initial && !fullLayout && leaves.length) {
       cy.fit(undefined, 45);
     }
+
+    this.updateEdges();
 
     if (this.selectedId) {
       cy.getElementById(this.selectedId).addClass("selected-node");
@@ -606,7 +795,12 @@ const Graph = {
       return;
     }
 
-    const { positions, widths } = TreeLayout.compute(model, {
+    const reserve = (id) => {
+      const card = this.cards.find((item) => item.data.owner === id && item.data.parent === id);
+
+      return card ? MetaCards.reserve(card.data) : {};
+    };
+    const { positions, widths, minWidths } = TreeLayout.compute(model, {
       indent: this.setting("tree.indent", 28),
       kind: (id) => {
         const node = cy.getElementById(id);
@@ -620,7 +814,9 @@ const Graph = {
       size: (id) => {
         const node = cy.getElementById(id);
 
-        return { w: node.outerWidth(), h: node.outerHeight() };
+        const card = this.cards.find((item) => item.data.owner === id && item.data.parent !== id && !item.data.free);
+
+        return { w: node.outerWidth(), h: node.outerHeight(), ...(card ? MetaCards.beside(card.data) : {}) };
       },
       group: (id) => {
         const node = cy.getElementById(id);
@@ -628,19 +824,31 @@ const Graph = {
         const chars = String(node.data("display") || "").length;
         const lines = Math.max(1, Math.ceil((chars * font * 0.6) / 150));
 
-        return { pad: node.numericStyle("padding"), labelH: font * 1.4 * lines };
+        return { pad: node.numericStyle("padding"), border: node.numericStyle("border-width"), labelH: font * 1.4 * lines, ...reserve(id) };
+      },
+      order: (key, ids) => {
+        const known = (this.treeOrder[key] || []).filter((id) => ids.includes(id));
+
+        return known.concat(ids.filter((id) => !known.includes(id)));
       }
     });
 
     MetaCards.hold(() => cy.batch(() => {
       Object.entries(widths).forEach(([id, width]) => {
-        cy.getElementById(id).style("width", width);
+        const node = cy.getElementById(id);
+
+        node.style("width", width - (node.outerWidth() - node.width()));
+      });
+
+      Object.entries(minWidths).forEach(([id, width]) => {
+        cy.getElementById(id).style({ "min-width": width, "min-width-bias-left": "100%", "min-width-bias-right": "0%" });
       });
 
       Object.entries(positions).forEach(([id, point]) => cy.getElementById(id).position(point));
     }));
 
     MetaCards.placeAll(cy);
+    this.updateEdges();
 
     if (fit) {
       cy.fit(undefined, 45);
@@ -665,6 +873,7 @@ const Graph = {
 
     MetaCards.hold(() => layout.run());
     MetaCards.placeAll(this.cy);
+    this.updateEdges();
   },
 
   relayout(name) {
@@ -675,9 +884,15 @@ const Graph = {
     }
 
     this.saved = {};
+    this.treeOrder = {};
     this.pinned = false;
     this.runLayout(name, { fit: true });
     MetaCards.placeAll(this.cy, { resetFree: true });
+  },
+
+  // A right-drag that panned the view must not open a context menu.
+  menuAllowed() {
+    return typeof Tools === "undefined" || !Tools.panned;
   },
 
   setData(node, key, value) {

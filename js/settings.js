@@ -23,7 +23,9 @@
     bool("delete.relinkToParent", false, "Suppression : rattacher les liens au parent", "Case par défaut de la confirmation de suppression : les liens des briques supprimées sont rattachés à leur parent."),
     bool("drop.repulsion", true, "Répulsion au relâchement", "Au relâchement, la boîte déplacée se pose sans chevaucher ses frères."),
     choice("selection.tab", "keep", ["keep", "inspector", "style"], "Onglet à la sélection", "keep : ne pas changer d’onglet ; inspector : Inspecteur ; style : Style."),
-    choice("edges.curve", "bezier", ["bezier", "taxi", "straight", "round-taxi"], "Forme des liens", "bezier (courbe), taxi (angle droit), straight (droit), round-taxi (angle arrondi)."),
+    choice("editor.foldSync", "graph-to-editor", ["graph-to-editor", "both", "off"], "Pliage synchronisé éditeur / graphe", "graph-to-editor : replier un groupe dans le graphe plie son bloc children: dans l’éditeur ; both : et inversement ; off : aucune synchronisation."),
+    choice("edges.curve", "bezier", ["bezier", "curved", "taxi", "straight", "round-taxi"], "Forme des liens", "bezier (auto : droit, courbé seulement pour les liens parallèles), curved (courbes franches), taxi (angle droit), straight (droit), round-taxi (angle arrondi)."),
+    choice("edges.side", "auto", ["auto", "right", "left", "bottom", "top"], "Côté de sortie des liens", "Côté de la boîte par où les liens sortent et entrent (formes angle et courbes) ; auto : à droite en disposition arbre, sinon direct."),
     num("edges.opacity", 1, 0.15, 1, 0.05, "Opacité des liens", "De 0,15 à 1."),
     num("nodes.size", 1, 0.6, 1.6, 0.05, "Taille des nœuds", "Facteur de taille global."),
     choice("layout.default", "fcose", LAYOUT_OPTIONS, "Disposition par défaut", "Disposition appliquée quand le document n’en précise pas."),
@@ -238,7 +240,7 @@
 
       // Silently ignored when the file is unreachable (file://) or invalid.
       loadSuggested() {
-        if (typeof fetch !== "function") return Promise.resolve(false);
+        if (typeof fetch !== "function" || (typeof location !== "undefined" && location.protocol === "file:")) return Promise.resolve(false);
         return fetch("topo.config.json", { cache: "no-store" })
           .then((res) => (res.ok ? res.json() : Promise.reject(new Error("absent"))))
           .then((json) => { self.setSuggested(isPlain(json.settings) ? json.settings : json); return true; })

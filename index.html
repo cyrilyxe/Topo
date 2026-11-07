@@ -107,7 +107,8 @@
 
     <div class="header-right">
       <input id="search" type="search" placeholder="Rechercher : clients, [Cc]lients ou /clients/i" aria-label="Rechercher dans le diagramme" />
-      <button id="btn-theme" type="button" class="icon-btn" title="Basculer thème clair / sombre" aria-label="Basculer le thème">◐</button>
+      <button id="btn-settings" type="button" class="icon-btn" title="Réglages" aria-label="Réglages">⚙</button>
+      <button id="btn-theme"type="button" class="icon-btn" title="Basculer thème clair / sombre" aria-label="Basculer le thème">◐</button>
       <button id="btn-help" type="button" class="icon-btn" title="Aide (F1)" aria-label="Aide">?</button>
     </div>
   </header>
@@ -122,6 +123,8 @@
         <button type="button" class="tab" role="tab" data-tab="project" id="tab-project" hidden>Projet</button>
         <button type="button" class="tab" role="tab" data-tab="trash" id="tab-trash" hidden>Corbeille <span id="trash-badge" class="badge" hidden>0</span></button>
       </div>
+
+      <div id="selection-header" class="selection-header" aria-live="polite" hidden></div>
 
       <div id="pane-editor" class="pane active" role="tabpanel">
         <textarea id="yaml-editor" spellcheck="false"></textarea>
@@ -191,6 +194,7 @@
             <option value="concentric" title="Cercles concentriques, les nœuds les plus connectés au centre">concentric</option>
             <option value="tree" title="Arbre : briques empilées en colonne, indentées par niveau, dans l'ordre du YAML ; clic = déplier/replier un niveau">arbre</option>
           </select>
+          <button id="btn-relayout" type="button" class="icon-btn" title="Rejouer la disposition" aria-label="Rejouer la disposition">↻</button>
           <span id="layout-help" class="layout-help" tabindex="0" title="">ⓘ</span>
         </label>
       </div>
@@ -213,6 +217,10 @@
         <span><i class="dot collapsed"></i> Groupe replié</span>
         <span><i class="dot meta"></i> Méta-arête</span>
         <span><i class="dot search"></i> Résultat de recherche</span>
+        <span class="hidden-box">
+          <button id="hidden-indicator" type="button" class="hidden-indicator" aria-haspopup="true" aria-expanded="false" hidden></button>
+          <div id="hidden-list" class="hidden-list" hidden></div>
+        </span>
       </div>
     </section>
   </main>

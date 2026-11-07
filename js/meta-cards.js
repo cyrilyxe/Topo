@@ -8,6 +8,12 @@ const MetaCards = {
   CHAR_WIDTH: 6.2,
   OUTSIDE: 8,
   INSET: 4,
+  FONT_SIZE: 10,
+  LINE_HEIGHT: 1.25,
+  FONT: "Helvetica Neue, Helvetica, sans-serif",
+  PAD: 6,
+  BORDER: 1.5,
+  ctx: null,
   expanded: {},
   busy: false,
 
@@ -96,6 +102,66 @@ const MetaCards = {
     return token(`--node-${data.typeKey || "default"}`, "#0369a1");
   },
 
+  textWidth(text) {
+    if (this.ctx === null) {
+      const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+
+      this.ctx = canvas ? canvas.getContext("2d") : false;
+
+      if (this.ctx) {
+        this.ctx.font = `400 ${this.FONT_SIZE}px ${this.FONT}`;
+      }
+    }
+
+    return this.ctx ? this.ctx.measureText(text).width : text.length * this.CHAR_WIDTH;
+  },
+
+  // Pure-ish: content size { w, h } of wrapped text (no padding, no border).
+  dims(text, maxWidth) {
+    let lines = 0;
+    let widest = 0;
+
+    String(text).split("\n").forEach((line) => {
+      let current = "";
+
+      line.split(/\s+/).forEach((word) => {
+        const next = current ? `${current} ${word}` : word;
+
+        if (current && this.textWidth(next) > maxWidth) {
+          widest = Math.max(widest, this.textWidth(current));
+          lines += 1;
+          current = word;
+        } else {
+          current = next;
+        }
+      });
+
+      widest = Math.min(maxWidth, Math.max(widest, this.textWidth(current)));
+      lines += 1;
+    });
+
+    return { w: Math.ceil(widest) + 2, h: Math.ceil(lines * this.FONT_SIZE * this.LINE_HEIGHT) + 2 };
+  },
+
+  outerSize(data) {
+    return { w: data.w + this.PAD * 2 + this.BORDER * 2, h: data.h + this.PAD * 2 + this.BORDER * 2 };
+  },
+
+  // Space an inside card takes in its group: above or below the children, and its width.
+  reserve(data) {
+    const { w, h } = this.outerSize(data);
+    const space = h + this.INSET;
+
+    return data.anchor.startsWith("top") ? { top: space, bottom: 0, cardW: w } : { top: 0, bottom: space, cardW: w };
+  },
+
+  // Horizontal room taken beside a leaf by its outside card.
+  beside(data) {
+    const space = this.outerSize(data).w + this.OUTSIDE;
+
+    return data.anchor.endsWith("right") ? { left: 0, right: space } : { left: space, right: 0 };
+  },
+
   // Returns the card elements for the visible bricks of `elements` (already styled); does not mutate them.
   inject(elements, model, known = {}) {
     const nodes = elements.filter((element) => element.group === "nodes");
@@ -131,9 +197,11 @@ const MetaCards = {
     const free = config.position === "free";
     const open = Boolean(this.expanded[id]);
     const saved = free ? known[id] : null;
+    const maxWidth = Math.round(config.maxChars * this.CHAR_WIDTH);
     const card = {
       group: "nodes",
       data: {
+        ...this.dims(open ? full : text, maxWidth),
         id,
         owner: owner.id,
         text,
@@ -144,7 +212,7 @@ const MetaCards = {
         free,
         placed: Boolean(saved),
         anchor: free ? "top-right" : config.position,
-        maxWidth: Math.round(config.maxChars * this.CHAR_WIDTH),
+        maxWidth,
         ownerColor: this.ownerColor(element.data),
         parent: (expandedGroup ? owner.id : element.data.parent) || undefined
       },
@@ -164,49 +232,42 @@ const MetaCards = {
     const open = !card.data("expanded");
 
     this.expanded[id] = open;
-    card.data({ expanded: open, shown: open ? card.data("full") : card.data("text") });
+    const shown = open ? card.data("full") : card.data("text");
+
+    card.data({ expanded: open, shown, ...this.dims(shown, card.data("maxWidth")) });
     this.place(card);
   },
 
-  box(node) {
-    const box = node.boundingBox({ includeLabels: false, includeOverlays: false, includeEdges: false });
+  box(node, labels = false) {
+    const box = node.boundingBox({ includeLabels: labels, includeOverlays: false, includeEdges: false });
 
     return { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2 };
   },
 
-  // Box of an expanded group computed without its own cards (keeps the placement stable).
-  innerBox(owner) {
-    const kids = owner.children().not(".meta-card");
-
-    if (kids.empty()) {
-      return this.box(owner);
-    }
-
-    const box = this.box(kids);
-    const pad = owner.numericStyle("padding") || 0;
-
-    return { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
-  },
-
+  // An inside card sits outside the bounding box of the children (above or below), never over them.
   target(card, owner) {
     const w = card.outerWidth();
     const h = card.outerHeight();
-    const inside = card.data("parent") === owner.id();
-    const box = inside ? this.innerBox(owner) : this.box(owner);
     const anchor = card.data("anchor");
     const right = anchor.endsWith("right");
     const top = anchor.startsWith("top");
-    const gap = inside ? this.INSET : this.OUTSIDE;
-    const edge = inside ? this.INSET : 0;
-    let x;
+    const kids = card.data("parent") === owner.id() ? owner.children().not(".meta-card") : null;
 
-    if (inside) {
-      x = right ? box.x2 - gap - w / 2 : box.x1 + gap + w / 2;
-    } else {
-      x = right ? box.x2 + gap + w / 2 : box.x1 - gap - w / 2;
+    if (kids && kids.nonempty()) {
+      const box = this.box(kids, true);
+      const x1 = right ? Math.max(box.x2 - w, box.x1) : box.x1;
+
+      return { x: x1 + w / 2, y: top ? box.y1 - this.INSET - h / 2 : box.y2 + this.INSET + h / 2 };
     }
 
-    return { x, y: top ? box.y1 + edge + h / 2 : box.y2 - edge - h / 2 };
+    const box = this.box(owner);
+    const inside = Boolean(kids);
+    const gap = inside ? this.INSET : this.OUTSIDE;
+    const x = inside
+      ? (right ? box.x2 - gap - w / 2 : box.x1 + gap + w / 2)
+      : (right ? box.x2 + gap + w / 2 : box.x1 - gap - w / 2);
+
+    return { x, y: top ? box.y1 + (inside ? this.INSET : 0) + h / 2 : box.y2 - (inside ? this.INSET : 0) - h / 2 };
   },
 
   place(card) {

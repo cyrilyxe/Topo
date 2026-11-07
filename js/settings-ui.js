@@ -18,27 +18,28 @@ const SettingsUI = {
 
   build() {
     this.modal = document.createElement("div");
-    this.modal.className = "modal";
+    this.modal.className = "float-win";
     this.modal.hidden = true;
+    this.modal.setAttribute("role", "dialog");
+    this.modal.setAttribute("aria-labelledby", "settings-title");
+    this.modal.tabIndex = -1;
     this.modal.innerHTML = `
-      <div class="modal-backdrop" data-close="1"></div>
-      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
-        <div class="modal-header">
-          <h2 id="settings-title">Réglages</h2>
-          <button type="button" class="icon-btn" data-close="1" aria-label="Fermer les réglages">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="settings-list"></div>
-          <div class="settings-actions">
-            <button type="button" data-act="clean" title="Retire du YAML les réglages égaux aux défauts, les règles de style vides et les propriétés highlight/hidden à false.">Nettoyer le YAML</button>
-            <button type="button" data-act="freeze" title="Écrit toutes les valeurs effectives dans le bloc settings: du document.">Figer la configuration dans le YAML</button>
-          </div>
+      <div class="float-win-header">
+        <h2 id="settings-title">Réglages</h2>
+        <button type="button" class="icon-btn" data-close="1" aria-label="Fermer les réglages">✕</button>
+      </div>
+      <div class="float-win-body">
+        <div class="settings-list"></div>
+        <div class="settings-actions">
+          <button type="button" data-act="clean" title="Retire du YAML les réglages égaux aux défauts, les règles de style vides et les propriétés highlight/hidden à false.">Nettoyer le YAML</button>
+          <button type="button" data-act="freeze" title="Écrit toutes les valeurs effectives dans le bloc settings: du document.">Figer la configuration dans le YAML</button>
         </div>
       </div>`;
     document.body.appendChild(this.modal);
-    this.dialog = this.modal.querySelector(".modal-dialog");
+    this.dialog = this.modal;
     this.list = this.modal.querySelector(".settings-list");
     this.renderRows();
+    this.restoreGeometry();
 
     this.modal.addEventListener("click", (event) => {
       if (event.target.dataset && event.target.dataset.close) this.close();
@@ -52,6 +53,68 @@ const SettingsUI = {
         this.close();
       }
     });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.isOpen() && document.activeElement === document.body) this.close();
+    });
+    this.bindDrag(this.modal.querySelector(".float-win-header"));
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(() => this.saveGeometry()).observe(this.modal);
+    }
+    const button = document.getElementById("btn-settings");
+    if (button) button.addEventListener("click", () => (this.isOpen() ? this.close() : this.open()));
+  },
+
+  GEOMETRY_KEY: "topo:settings-win",
+
+  readGeometry() {
+    try {
+      const geo = JSON.parse(localStorage.getItem(this.GEOMETRY_KEY) || "null");
+      return geo && typeof geo === "object" ? geo : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  saveGeometry() {
+    if (!this.isOpen()) return;
+    const box = this.modal.getBoundingClientRect();
+    try {
+      localStorage.setItem(this.GEOMETRY_KEY, JSON.stringify({ x: Math.round(box.left), y: Math.round(box.top), w: Math.round(box.width), h: Math.round(box.height) }));
+    } catch (e) { /* storage unavailable */ }
+  },
+
+  // Keeps at least part of the title bar reachable.
+  place(x, y) {
+    const maxX = Math.max(0, window.innerWidth - 80);
+    const maxY = Math.max(0, window.innerHeight - 40);
+    this.modal.style.left = `${Math.min(maxX, Math.max(-this.modal.offsetWidth + 80, x))}px`;
+    this.modal.style.top = `${Math.min(maxY, Math.max(0, y))}px`;
+  },
+
+  restoreGeometry() {
+    const geo = this.readGeometry();
+    if (geo && Number.isFinite(geo.w) && geo.w > 200) this.modal.style.width = `${geo.w}px`;
+    if (geo && Number.isFinite(geo.h) && geo.h > 120) this.modal.style.height = `${geo.h}px`;
+    this.modal.style.left = `${geo && Number.isFinite(geo.x) ? geo.x : Math.max(20, window.innerWidth - 640)}px`;
+    this.modal.style.top = `${geo && Number.isFinite(geo.y) ? geo.y : 70}px`;
+  },
+
+  bindDrag(handle) {
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target.closest("button")) return;
+      const box = this.modal.getBoundingClientRect();
+      const dx = event.clientX - box.left;
+      const dy = event.clientY - box.top;
+      const move = (e) => this.place(e.clientX - dx, e.clientY - dy);
+      const stop = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", stop);
+        this.saveGeometry();
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", stop);
+      event.preventDefault();
+    });
   },
 
   isOpen() {
@@ -62,7 +125,8 @@ const SettingsUI = {
     this.refresh();
     this.lastFocus = document.activeElement;
     this.modal.hidden = false;
-    this.dialog.focus();
+    this.place(this.modal.offsetLeft, this.modal.offsetTop);
+    this.modal.focus();
   },
 
   close() {

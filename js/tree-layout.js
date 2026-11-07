@@ -1,63 +1,68 @@
 "use strict";
 
-// Outline layout: one row per visible leaf, indented by depth, in model order.
+// Outline layout: one row per visible leaf, in model order. Indentation is an internal left offset:
+// the children of a group share one left edge = group left + padding + indent.
 const TreeLayout = {
   MARGIN: 80,
   GAP: 12,
 
-  // opts: { indent, kind(id) -> "leaf" | "group" | null (hidden), size(id) -> { w, h },
-  //         group(id) -> { pad, labelH } }
-  // Returns { positions: { id: {x, y} } (leaf centres), widths: { id: w } (equalised per group) }.
+  // opts: { indent, kind(id) -> "leaf" | "group" | null (hidden), size(id) -> { w, h, left?, right? } (left/right: outside cards beside a leaf),
+  //         group(id) -> { pad, border?, labelH, top?, bottom?, cardW? }, order?(parentId | "", ids) -> ids }
+  // Returns { positions: { id: {x, y} } (leaf centres), widths: { id: w } (equalised leaves),
+  //           minWidths: { id: w } (groups: content width incl. indent; Cytoscape adds the padding, the extra goes to the left) }.
   compute(model, opts) {
     const indent = Number(opts.indent) || 28;
     const positions = {};
     const widths = {};
+    const minWidths = {};
+    const order = (key, ids) => (opts.order ? opts.order(key, ids) : ids);
     let cursor = this.MARGIN;
 
     const place = (id, left) => {
-      const kind = opts.kind(id);
+      const { pad, border = 0, labelH, top = 0, bottom = 0, cardW = 0 } = opts.group(id);
+      const items = order(id, model.byId.get(id).children.filter((child) => opts.kind(child)));
+      const leaves = items.filter((child) => opts.kind(child) === "leaf").map((child) => opts.size(child));
+      const leafWidth = Math.max(0, ...leaves.map((size) => size.w));
+      const side = Math.max(0, ...leaves.map((size) => size.left || 0));
+      const childLeft = left + pad + indent + side;
+      let inner = Math.max(side + leafWidth + Math.max(0, ...leaves.map((size) => size.right || 0)), cardW);
 
-      if (!kind) {
-        return;
-      }
-
-      if (kind === "leaf") {
-        return;
-      }
-
-      const { pad, labelH } = opts.group(id);
-      const items = model.byId.get(id).children.filter((child) => opts.kind(child));
-      const width = Math.max(0, ...items.filter((child) => opts.kind(child) === "leaf").map((child) => opts.size(child).w));
-
-      cursor += labelH + pad;
+      cursor += labelH + pad + top;
 
       items.forEach((child) => {
         if (opts.kind(child) === "leaf") {
           const { h } = opts.size(child);
 
-          widths[child] = width;
-          positions[child] = { x: left + indent + width / 2, y: cursor + h / 2 };
+          widths[child] = leafWidth;
+          positions[child] = { x: childLeft + leafWidth / 2, y: cursor + h / 2 };
           cursor += h + this.GAP;
         } else {
-          place(child, left + indent);
+          inner = Math.max(inner, side + place(child, childLeft));
         }
       });
 
-      cursor += pad;
+      cursor += bottom + pad;
+      minWidths[id] = indent + inner;
+
+      return minWidths[id] + pad * 2 + border * 2;
     };
 
-    model.nodes.filter((node) => !node.parent).forEach((node) => {
-      if (opts.kind(node.id) === "leaf") {
-        const { w, h } = opts.size(node.id);
+    const roots = order("", model.nodes.filter((node) => !node.parent).map((node) => node.id));
 
-        positions[node.id] = { x: this.MARGIN + w / 2, y: cursor + h / 2 };
+    roots.forEach((id) => {
+      const kind = opts.kind(id);
+
+      if (kind === "leaf") {
+        const { w, h } = opts.size(id);
+
+        positions[id] = { x: this.MARGIN + w / 2, y: cursor + h / 2 };
         cursor += h + this.GAP;
-      } else {
-        place(node.id, this.MARGIN);
+      } else if (kind) {
+        place(id, this.MARGIN);
       }
     });
 
-    return { positions, widths };
+    return { positions, widths, minWidths };
   }
 };
 

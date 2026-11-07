@@ -37,6 +37,7 @@ const StyleUI = {
       }
     });
 
+    this.bindHiddenIndicator();
     this.render();
   },
 
@@ -59,10 +60,175 @@ const StyleUI = {
     } else if (act === "brush") {
       this.toggleBrush(event.detail > 1);
     } else if (act === "select") {
-      this.show(id);
+      this.focusRuleTarget(id);
+    } else if (act === "expand-ancestor") {
+      App.toggleCollapse(id);
+      setTimeout(() => this.focusRuleTarget(this.notice ? this.notice.id : null), 150);
+    } else if (act === "unhide-focus") {
+      this.unhide([id]);
+      setTimeout(() => this.focusRuleTarget(id), 150);
     } else if (act === "delete-target") {
       this.deleteRule([id]);
+    } else if (act === "unhide") {
+      this.unhide([id]);
+    } else if (act === "unhide-all") {
+      this.unhide();
     }
+  },
+
+  // Selects the brick targeted by a rule (stays on the Style tab) and brings it into view.
+  focusRuleTarget(id) {
+    const model = App.getModel();
+
+    this.notice = id && model && model.byId.has(id) ? { id } : null;
+
+    if (this.notice && !this.noticeInfo(model)) {
+      App.inspectNode(id, { center: false });
+      this.centerIfOffscreen(id);
+    }
+
+    this.render();
+  },
+
+  // Why the brick cannot be selected in the graph, or null.
+  noticeInfo(model) {
+    const id = this.notice && this.notice.id;
+
+    if (!id || !model.byId.has(id)) {
+      return null;
+    }
+
+    if (this.hiddenIds(model).includes(id)) {
+      return { text: "brique masquée", act: "unhide-focus", target: id, button: "Réafficher" };
+    }
+
+    const visible = Model.visibleAncestor(id, model, App.collapsed);
+
+    if (visible !== id) {
+      const group = model.byId.get(visible);
+
+      return { text: `dans « ${group ? group.label : visible} » replié`, act: "expand-ancestor", target: visible, button: "Déplier" };
+    }
+
+    return null;
+  },
+
+  centerIfOffscreen(id) {
+    const node = Graph.cy && Graph.cy.getElementById(id);
+
+    if (!node || node.empty()) {
+      return;
+    }
+
+    const box = node.renderedBoundingBox();
+
+    if (box.x1 < 0 || box.y1 < 0 || box.x2 > Graph.cy.width() || box.y2 > Graph.cy.height()) {
+      Graph.cy.animate({ center: { eles: node } }, { duration: 250 });
+    }
+  },
+
+  noticeHtml(model) {
+    const info = this.noticeInfo(model);
+    const node = info && model.byId.get(this.notice.id);
+
+    return info ? `<p class="rule-notice"><strong>${escapeHtml(node.label)}</strong> : ${escapeHtml(info.text)}
+      <button type="button" data-act="${info.act}" data-id="${escapeHtml(info.target)}">${info.button}</button></p>` : "";
+  },
+
+  // ---- hidden bricks ----
+
+  // Ids of the bricks hidden by a style rule (optionally restricted to a Set of ids).
+  hiddenIds(model, within) {
+    const map = Style.lookup(model);
+    const ids = [];
+
+    ((model.style && model.style.rules) || []).forEach((rule) => {
+      const id = map.get(rule.target);
+
+      if (id && rule.hidden && !ids.includes(id) && (!within || within.has(id))) {
+        ids.push(id);
+      }
+    });
+
+    return ids;
+  },
+
+  // Removes the `hidden` key (empty rules are dropped); no argument: every hidden brick.
+  unhide(ids) {
+    const model = App.getModel();
+    const list = ids || (model ? this.hiddenIds(model) : []);
+
+    if (!list.length) {
+      return;
+    }
+
+    this.mutate(list.length > 1 ? `Réaffichage de ${list.length} briques` : "Réaffichage d’une brique", (style, map) => this.patchRules(style, map, list, { hidden: null }));
+    this.render();
+  },
+
+  hiddenRows(ids, model) {
+    return ids.map((id) => {
+      const node = model.byId.get(id);
+
+      return `<li><span class="hidden-name" title="${escapeHtml(Model.pathLabel(id, model))}">${escapeHtml(node.label)}</span>
+        <button type="button" data-act="unhide" data-id="${escapeHtml(id)}">Réafficher</button></li>`;
+    }).join("");
+  },
+
+  hiddenSection(ids, model) {
+    if (!ids.length) {
+      return "";
+    }
+
+    return `
+      <h4>Briques masquées (${ids.length})</h4>
+      <ul class="hidden-rows">${this.hiddenRows(ids, model)}</ul>
+      <div class="actions"><button type="button" data-act="unhide-all">Tout réafficher</button></div>`;
+  },
+
+  renderHiddenIndicator(ids, model) {
+    const button = document.getElementById("hidden-indicator");
+    const list = document.getElementById("hidden-list");
+
+    if (!button || !list) {
+      return;
+    }
+
+    button.hidden = !ids.length;
+    button.textContent = `👁 ${ids.length} masquée${ids.length > 1 ? "s" : ""}`;
+    list.innerHTML = `<ul class="hidden-rows">${this.hiddenRows(ids, model)}</ul>
+      <div class="actions"><button type="button" data-act="unhide-all">Tout réafficher</button></div>`;
+
+    if (!ids.length) {
+      this.toggleHiddenList(false);
+    }
+  },
+
+  toggleHiddenList(open) {
+    const button = document.getElementById("hidden-indicator");
+    const list = document.getElementById("hidden-list");
+
+    if (button && list) {
+      list.hidden = !open;
+      button.setAttribute("aria-expanded", String(Boolean(open)));
+    }
+  },
+
+  bindHiddenIndicator() {
+    const button = document.getElementById("hidden-indicator");
+    const list = document.getElementById("hidden-list");
+
+    if (!button || !list) {
+      return;
+    }
+
+    button.addEventListener("click", () => this.toggleHiddenList(list.hidden));
+    list.addEventListener("click", (event) => this.onClick(event));
+    document.addEventListener("mousedown", (event) => {
+      if (!list.hidden && !event.target.closest(".hidden-box")) {
+        this.toggleHiddenList(false);
+      }
+    });
   },
 
   show(id) {
@@ -230,8 +396,12 @@ const StyleUI = {
 
     const size = Number(model.style && model.style.size) || 1;
     const items = this.targets.filter((id) => model.byId.has(id)).map((id) => this.effective(id, model));
+    const hiddenIds = this.hiddenIds(model);
+
+    this.renderHiddenIndicator(hiddenIds, model);
 
     this.content.innerHTML = `
+      ${this.hiddenSection(hiddenIds, model)}
       <div class="form-grid">
         <label>
           Taille globale des nœuds (fichier) : <span id="style-size-value">${size.toFixed(2)}×</span>
@@ -243,6 +413,7 @@ const StyleUI = {
       ${items.length ? this.renderTarget(items, model) : "<p class=\"empty\">Sélectionnez un nœud (clic dans le graphe ou dans le YAML, puis « Style » dans l’inspecteur).</p>"}
 
       <h4>Règles du fichier</h4>
+      ${this.noticeHtml(model)}
       <div id="style-rules"></div>
     `;
 
@@ -269,7 +440,7 @@ const StyleUI = {
 
     return `
       <div class="style-target">
-        ${single ? `<strong>${escapeHtml(single.label)}</strong><br /><span class="path">${escapeHtml(Model.pathLabel(single.id, model))}</span>` : `<strong>Style de ${items.length} briques</strong>`}
+        ${single ? "" : `<strong>Style de ${items.length} briques</strong>`}
         <div class="style-preview" title="Aperçu du style effectif">
           <span class="style-chip" style="background:${escapeHtml(color.value)};border-color:${escapeHtml(border.value)};opacity:${opacity.value};--fill:${first.fill}"></span>
           <span class="style-chip-text">${escapeHtml(color.value)} / ${escapeHtml(border.value)} / ${Math.round(opacity.value * 100)} %</span>
@@ -319,7 +490,7 @@ const StyleUI = {
           const id = map.get(rule.target);
 
           return `<li>
-            <code>${escapeHtml(rule.target)}</code>
+            ${id ? `<button type="button" class="link-node" data-act="select" data-id="${escapeHtml(id)}"><code>${escapeHtml(rule.target)}</code></button>` : `<code>${escapeHtml(rule.target)}</code>`}
             ${id ? `<button type="button" data-act="select" data-id="${escapeHtml(id)}">Éditer</button>` : "<em class=\"empty\">introuvable</em>"}
             ${id ? `<button type="button" data-act="delete-target" data-id="${escapeHtml(id)}">Supprimer</button>` : ""}
           </li>`;
@@ -348,6 +519,9 @@ const StyleUI = {
 
         if (done) {
           this.setGlobalSize(size);
+          this.clearPreview();
+        } else {
+          this.preview({ globalSize: size });
         }
         break;
       }
@@ -363,6 +537,9 @@ const StyleUI = {
         if (done) {
           this.pushRecent(target.value);
           this.apply({ [target.id === "style-color" ? "color" : "border"]: target.value });
+          this.clearPreview();
+        } else {
+          this.preview(target.id === "style-color" ? { color: target.value } : { border: target.value });
         }
         break;
 
@@ -371,6 +548,9 @@ const StyleUI = {
 
         if (done) {
           this.apply({ opacity: Number(target.value) });
+          this.clearPreview();
+        } else {
+          this.preview({ opacity: Number(target.value) });
         }
         break;
 
@@ -379,6 +559,9 @@ const StyleUI = {
 
         if (done) {
           this.apply({ size: Number(target.value) });
+          this.clearPreview();
+        } else {
+          this.preview({ size: Number(target.value) });
         }
         break;
 
@@ -390,6 +573,78 @@ const StyleUI = {
         break;
 
       default:
+    }
+  },
+
+  // ---- live preview (temporary Cytoscape bypass, never persisted) ----
+
+  preview(props) {
+    const cy = typeof Graph !== "undefined" ? Graph.cy : null;
+
+    if (!cy) {
+      return;
+    }
+
+    const scale = Style.scale();
+
+    cy.batch(() => {
+      if (props.globalSize !== undefined) {
+        cy.nodes().not(".meta-card").forEach((node) => {
+          const rule = node.data("rule") || {};
+
+          this.previewSize(node, Style.userScale * props.globalSize * (Number(rule.size) || 1));
+        });
+        return;
+      }
+
+      this.targets.forEach((id) => {
+        const node = cy.getElementById(id);
+
+        if (!node.length) {
+          return;
+        }
+
+        if (props.opacity !== undefined) {
+          node.style("opacity", props.opacity);
+        }
+
+        if (props.color !== undefined) {
+          node.style("background-color", props.color);
+        }
+
+        if (props.border !== undefined) {
+          node.style("border-color", props.border);
+        }
+
+        if (props.size !== undefined) {
+          this.previewSize(node, scale * props.size);
+        }
+      });
+    });
+  },
+
+  previewSize(node, size) {
+    const styles = { "font-size": (node.isParent() ? 12 : 11) * size };
+
+    if (node.isParent()) {
+      styles.padding = `${32 * size}px`;
+    } else if (node.hasClass("collapsed")) {
+      styles.width = 210 * size;
+      styles.height = 56 * size;
+      styles.padding = `${12 * size}px`;
+    } else {
+      styles.width = 170 * size;
+      styles.height = 42 * size;
+      styles.padding = `${12 * size}px`;
+    }
+
+    node.style(styles);
+  },
+
+  // Restores the normal rendering (also when the commit changed nothing and no re-render happened).
+  clearPreview() {
+    if (typeof Graph !== "undefined" && Graph.cy) {
+      Graph.applyStyle();
     }
   },
 

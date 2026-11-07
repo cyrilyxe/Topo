@@ -193,6 +193,8 @@ const App = {
     if (name === "editor") {
       Editor.refresh();
     }
+
+    this.updateSelectionHeader();
   },
 
   // ---- storage ----
@@ -432,6 +434,7 @@ const App = {
     Anomalies.render(model.anomalies);
     StyleUI.refresh();
     Trash.refresh();
+    this.syncEditorFolds();
 
     if (Graph.selectedId && model.byId.has(Graph.selectedId)) {
       Inspector.showNode(Graph.selectedId, model, this.collapsed);
@@ -439,6 +442,8 @@ const App = {
       Graph.selectedId = null;
       Inspector.clear();
     }
+
+    this.onSelectionChange(false);
 
     if (this.els.search.value.trim()) {
       this.runSearch(false);
@@ -672,9 +677,210 @@ const App = {
     if (context.type === "node") {
       this.inspectNode(context.id, { center: context.id !== this.lastCursorNode });
       this.lastCursorNode = context.id;
+      this.markFromEditor();
     } else if (context.type === "link" && context.link) {
       Inspector.showLink(context.link, this.model);
     }
+  },
+
+  // The next selection change comes from the editor: no highlight or scroll back into it.
+  markFromEditor() {
+    this.fromEditor = true;
+    setTimeout(() => {
+      this.fromEditor = false;
+    }, 0);
+  },
+
+  // Text selection covering node blocks selects these nodes in the graph (without taking focus).
+  onEditorSelection(ranges) {
+    if (this.loading || !this.model || !Graph.cy) {
+      return;
+    }
+
+    const ids = Editor.nodesInRanges(ranges, this.model).filter((id) => Graph.cy.getElementById(id).nonempty());
+
+    if (!ids.length) {
+      this.onCursorLine(Editor.cm.getCursor().line);
+      return;
+    }
+
+    const current = Tools.selection();
+    const same = !current.edges.length && current.nodes.length === ids.length && ids.every((id) => current.nodes.includes(id));
+
+    if (!same && ids.length === 1) {
+      this.inspectNode(ids[0], { center: false });
+    } else if (!same) {
+      Graph.cy.elements().unselect();
+      Graph.select(ids[0], false);
+      ids.slice(1).forEach((id) => Graph.cy.getElementById(id).select());
+    }
+
+    this.markFromEditor();
+  },
+
+  // ---- shared selection header, multi-selection, editor sync ----
+
+  scheduleSelectionChange() {
+    clearTimeout(this.selectionTimer);
+    this.selectionTimer = setTimeout(() => this.onSelectionChange(true), 0);
+  },
+
+  selectedEdges() {
+    return Tools.selection().edges.map((id) => {
+      const edge = Graph.cy.getElementById(id);
+
+      return { id, source: edge.source().id(), target: edge.target().id(), label: edge.data("label"), isMeta: Boolean(edge.data("isMeta")) };
+    });
+  },
+
+  onSelectionChange(scroll) {
+    if (!this.model || !Graph.cy) {
+      return;
+    }
+
+    const nodes = Tools.selection().nodes;
+    const edges = this.selectedEdges();
+
+    if (nodes.length + edges.length > 1) {
+      Inspector.showMany({ nodes, edges }, this.model, this.collapsed);
+    } else if (Inspector.multi) {
+      if (nodes.length === 1) {
+        Inspector.showNode(nodes[0], this.model, this.collapsed);
+      } else {
+        Inspector.clear();
+      }
+    }
+
+    this.updateSelectionHeader();
+    this.syncEditorSelection(scroll && !this.fromEditor, nodes, edges);
+  },
+
+  syncEditorSelection(scroll, nodeIds, edges) {
+    if (!Editor.cm || !this.model) {
+      return;
+    }
+
+    if (this.fromEditor || nodeIds.length + edges.length === 0) {
+      Editor.clearHighlight();
+      return;
+    }
+
+    const edgeIds = new Set(edges.map((edge) => edge.id));
+    const nodes = nodeIds.map((id) => this.model.byId.get(id)).filter(Boolean);
+    const links = this.model.links.filter((link) => edgeIds.has(this.linkEdgeId(link.from, link.to).id));
+
+    Editor.highlightSelection(nodes, links, scroll);
+  },
+
+  selectionHeaderHtml(nodes, edges, model) {
+    const total = nodes.length + edges.length;
+    const label = (id) => (model.byId.get(id) ? model.byId.get(id).label : id);
+
+    if (total === 1 && nodes.length) {
+      return `<h3>${escapeHtml(label(nodes[0]))}</h3><p class="path">${escapeHtml(Model.pathLabel(nodes[0], model))}</p>`;
+    }
+
+    if (total === 1) {
+      const edge = edges[0];
+
+      return `<h3>Lien : ${escapeHtml(label(edge.source))} → ${escapeHtml(label(edge.target))}</h3><p class="path">${escapeHtml(Model.pathLabel(edge.source, model))} → ${escapeHtml(Model.pathLabel(edge.target, model))}</p>`;
+    }
+
+    const names = nodes.map((id) => `<button type="button" class="sel-name" data-sel-node="${escapeHtml(id)}" title="Réduire la sélection à cet élément">${escapeHtml(label(id))}</button>`)
+      .concat(edges.map((edge) => `<button type="button" class="sel-name" data-sel-edge="${escapeHtml(edge.id)}" title="Réduire la sélection à ce lien">${escapeHtml(label(edge.source))} → ${escapeHtml(label(edge.target))}</button>`));
+    const rest = names.length - Inspector.MULTI_LIMIT;
+
+    return `<h3>Sélection de ${total} éléments</h3>
+      <div class="sel-names">${names.slice(0, Inspector.MULTI_LIMIT).join("")}${rest > 0 ? `<span class="sel-more">… et ${rest} autres</span>` : ""}</div>`;
+  },
+
+  updateSelectionHeader() {
+    const header = document.getElementById("selection-header");
+    const tab = document.querySelector(".tab.active");
+    const name = tab ? tab.dataset.tab : "editor";
+
+    if (!header) {
+      return;
+    }
+
+    const ready = Boolean(this.model && Graph.cy);
+    const nodes = ready ? Tools.selection().nodes.filter((id) => this.model.byId.has(id)) : [];
+    const edges = ready ? this.selectedEdges() : [];
+
+    header.classList.toggle("compact", name === "editor");
+
+    if (this.linkHeader) {
+      this.renderLinkHeader(header);
+      return;
+    }
+
+    if (!nodes.length && !edges.length) {
+      header.innerHTML = "";
+      header.hidden = true;
+      return;
+    }
+
+    header.innerHTML = this.selectionHeaderHtml(nodes, edges, this.model);
+    header.hidden = !["editor", "inspector", "style"].includes(name);
+  },
+
+  // Link tool: while a link is being drawn, the header shows source -> hovered target.
+  setLinkHeader(info) {
+    this.linkHeader = info;
+    this.updateSelectionHeader();
+  },
+
+  renderLinkHeader(header) {
+    const { from, to } = this.linkHeader;
+    const model = this.model;
+    const name = (id) => (id && model.byId.has(id) ? model.byId.get(id).label : "…");
+    const path = (id) => (id && model.byId.has(id) ? Model.pathLabel(id, model) : "…");
+
+    header.innerHTML = `<h3>Lien : ${escapeHtml(name(from))} → ${escapeHtml(name(to))}</h3><p class="path">${escapeHtml(path(from))} → ${escapeHtml(path(to))}</p>`;
+    header.hidden = false;
+  },
+
+  reduceSelection(nodeId, edgeId) {
+    Graph.cy.elements().unselect();
+
+    if (nodeId) {
+      this.inspectNode(nodeId, { center: false });
+    } else {
+      Graph.cy.getElementById(edgeId).select();
+    }
+  },
+
+  syncEditorFolds() {
+    if (Settings.get("editor.foldSync") !== "off" && Editor.cm && this.model) {
+      Editor.syncFolds(this.collapsed, this.model);
+    }
+  },
+
+  // Fold/unfold in the editor gutter: collapses/expands the group in the graph (mode "both").
+  onEditorFold(kind, line) {
+    if (Settings.get("editor.foldSync") !== "both" || !this.model || this.loading) {
+      return;
+    }
+
+    const context = Editor.analyzeLine(line, this.model);
+    const node = context.type === "node" ? this.model.byId.get(context.id) : null;
+    const folded = kind === "fold";
+
+    if (!node || !node.children.length || this.collapsed.has(node.id) === folded) {
+      return;
+    }
+
+    this.dropFocus();
+
+    if (folded) {
+      this.collapsed.add(node.id);
+      Editor.lastFolds.add(node.id);
+    } else {
+      this.collapsed.delete(node.id);
+      Editor.lastFolds.delete(node.id);
+    }
+
+    this.render();
   },
 
   viewInYaml(id) {
@@ -813,6 +1019,12 @@ const App = {
 
     if (isGroup) {
       actions.push({ label: this.collapsed.has(id) ? "Déplier" : "Replier", run: () => this.toggleCollapse(id) });
+
+      const hiddenKids = StyleUI.hiddenIds(this.model, new Set(Inspector.descendants(id, this.model).keys()));
+
+      if (hiddenKids.length) {
+        actions.push({ label: `Réafficher les enfants masqués (${hiddenKids.length})`, run: () => StyleUI.unhide(hiddenKids) });
+      }
     }
 
     actions.push(
@@ -1189,7 +1401,56 @@ const App = {
     document.getElementById("btn-collapse-all").addEventListener("click", () => this.collapseAll());
     document.getElementById("btn-expand-all").addEventListener("click", () => this.expandAll());
 
+    // Replaying the layout: button, or re-selecting the already active option.
+    const replayLayout = () => {
+      this.layout = this.els.layoutSelect.value;
+
+      if (this.layout === "tree") {
+        this.enterTree();
+      }
+
+      Graph.relayout(this.layout);
+      this.schedulePersistView();
+    };
+
+    let layoutBefore = null;
+    let layoutChanged = false;
+
+    document.getElementById("btn-relayout").addEventListener("click", replayLayout);
+    ["focus", "mousedown"].forEach((name) => {
+      this.els.layoutSelect.addEventListener(name, () => {
+        layoutBefore = this.els.layoutSelect.value;
+        layoutChanged = false;
+      });
+    });
+    this.els.layoutSelect.addEventListener("click", () => {
+      const select = this.els.layoutSelect;
+
+      if (select.dataset.open === "1") {
+        select.dataset.open = "0";
+
+        if (layoutBefore !== null && !layoutChanged && select.value === layoutBefore) {
+          replayLayout();
+        }
+      } else if (!layoutChanged) {
+        select.dataset.open = "1";
+      }
+    });
+    this.els.layoutSelect.addEventListener("blur", () => {
+      this.els.layoutSelect.dataset.open = "0";
+    });
+    this.els.layoutSelect.addEventListener("keyup", (event) => {
+      if (event.key === "Enter" && !layoutChanged && this.els.layoutSelect.value === layoutBefore) {
+        replayLayout();
+      }
+
+      layoutChanged = false;
+    });
+
     this.els.layoutSelect.addEventListener("change", () => {
+      layoutChanged = true;
+      layoutBefore = this.els.layoutSelect.value;
+      this.els.layoutSelect.dataset.open = "0";
       this.layout = this.els.layoutSelect.value;
       this.updateLayoutHelp();
 
@@ -1214,7 +1475,17 @@ const App = {
     sizeInput.value = Settings.get("nodes.size");
     Style.setUserScale(sizeInput.value);
 
+    // Live preview while dragging (no storage write); committed on release.
     sizeInput.addEventListener("input", () => {
+      if (Settings.source("nodes.size") === "document") {
+        return;
+      }
+
+      Style.setUserScale(sizeInput.value);
+      Graph.applyStyle();
+    });
+
+    sizeInput.addEventListener("change", () => {
       Settings.set("nodes.size", sizeInput.value);
 
       if (Settings.source("nodes.size") === "document") {
@@ -1319,8 +1590,10 @@ const App = {
         this.persistText();
         this.scheduleApply();
       },
-      (line) => this.onCursorLine(line)
+      (line) => this.onCursorLine(line),
+      (ranges) => this.onEditorSelection(ranges)
     );
+    Editor.onFold = (kind, line) => this.onEditorFold(kind, line);
 
     Graph.init(document.getElementById("cy"), {
       onNodeTap: (id) => !Tools.onNodeTap() && this.inspectNode(id, { tab: true, center: false }),
@@ -1338,6 +1611,14 @@ const App = {
     });
 
     Graph.cy.on("render", () => this.moveCard());
+    Graph.cy.on("select unselect", () => this.scheduleSelectionChange());
+    document.getElementById("selection-header").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-sel-node], button[data-sel-edge]");
+
+      if (button) {
+        this.reduceSelection(button.dataset.selNode, button.dataset.selEdge);
+      }
+    });
     Trash.init();
     Tools.init();
 
@@ -1366,6 +1647,12 @@ const App = {
     });
 
     Settings.init();
+    Settings.onChange((keys) => {
+      if (keys.includes("editor.foldSync") && Editor.lastFolds) {
+        Editor.lastFolds = new Set();
+        this.syncEditorFolds();
+      }
+    });
     History.bind({ get: () => this.getText(), set: (text) => this.replaceText(text) });
     History.onChange((state) => this.updateHistoryMenu(state));
     History.installShortcuts();

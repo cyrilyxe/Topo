@@ -13,11 +13,11 @@ const Tools = {
     { id: "move", key: "M", name: "Déplacer dans…", icon: "<rect x=\"3\" y=\"12\" width=\"18\" height=\"9\" rx=\"2\" /><path d=\"M12 3v10m0 0l-3.5-3.5M12 13l3.5-3.5\" />" }
   ],
   HELP: {
-    select: "Sélection : clic = sélectionner (Maj/Ctrl pour ajouter), glissez le fond pour un rectangle, glissez une brique pour la déplacer — Suppr pour supprimer",
-    hand: "Main : glissez pour déplacer la vue — Échap pour revenir à la sélection",
-    brick: "Brique : cliquez une brique pour lui ajouter un enfant, ou le fond pour une brique racine — Échap pour revenir à la sélection",
-    link: "Lien : glissez d’une brique à une autre pour les relier — Échap pour annuler",
-    move: "Glissez une brique sur une autre pour l’y ranger, ou sur le fond pour la sortir à la racine — Échap annule"
+    select: "Sélection : clic = sélectionner (Maj/Ctrl pour ajouter), glissez le fond pour un rectangle, glissez une brique pour la déplacer — clic droit/milieu = déplacer la vue, molette = zoom — Suppr pour supprimer",
+    hand: "Main : clic gauche maintenu = déplacer la vue (ou clic droit/milieu), molette = zoom — Échap pour revenir à la sélection",
+    brick: "Brique : cliquez une brique pour lui ajouter un enfant, ou le fond pour une brique racine — clic droit/milieu = déplacer la vue, molette = zoom — Échap : sélection",
+    link: "Lien : glissez d’une brique à une autre pour les relier, clic = inspecter — clic droit/milieu = déplacer la vue, molette = zoom — Échap pour annuler",
+    move: "Glissez une brique sur une autre pour l’y ranger, ou sur le fond pour la sortir à la racine — clic droit/milieu = déplacer la vue, molette = zoom — Échap annule"
   },
   PLAN: [["front", "Premier plan"], ["forward", "Avancer"], ["backward", "Reculer"], ["back", "Arrière-plan"]],
 
@@ -26,6 +26,9 @@ const Tools = {
   mod: false,
   muted: false,
   linkDrag: null,
+  panDrag: null,
+  panned: false,
+  hovered: null,
   moveDrag: null,
   els: {},
   changeTimer: null,
@@ -41,6 +44,7 @@ const Tools = {
     this.els.help = document.getElementById("tools-help");
     this.buildBar();
     this.buildOverlay(wrap);
+    this.buildTip(wrap);
     this.bindCy();
     this.bindKeys();
 
@@ -74,10 +78,19 @@ const Tools = {
     svg.setAttribute("class", "tools-overlay");
     svg.setAttribute("aria-hidden", "true");
     svg.innerHTML = "<line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"0\" />";
-    svg.hidden = true;
+    svg.setAttribute("hidden", "");
     wrap.appendChild(svg);
     this.els.overlay = svg;
     this.els.line = svg.querySelector("line");
+  },
+
+  buildTip(wrap) {
+    const tip = document.createElement("div");
+
+    tip.className = "tools-tip";
+    tip.hidden = true;
+    wrap.appendChild(tip);
+    this.els.tip = tip;
   },
 
   setTool(id) {
@@ -87,6 +100,7 @@ const Tools = {
 
     this.cancelLink();
     this.cancelMove();
+    this.clearHover();
     this.tool = id;
     App.store(this.STORE_KEY, id);
     this.applyTool();
@@ -96,8 +110,9 @@ const Tools = {
     const cy = this.cy;
     const current = this.current;
 
-    cy.userPanningEnabled(current !== "select" && current !== "move");
+    cy.userPanningEnabled(current === "brick" || current === "link");
     cy.boxSelectionEnabled(current === "select");
+    cy.userZoomingEnabled(true);
     cy.autoungrabify(current !== "select" && current !== "move");
     cy.autounselectify(current === "hand");
 
@@ -189,6 +204,141 @@ const Tools = {
     window.addEventListener("mousemove", (event) => this.moveTrack(event));
     window.addEventListener("mousemove", (event) => this.linkMove(event));
     window.addEventListener("mouseup", (event) => this.linkEnd(event));
+    window.addEventListener("blur", () => this.cancelLink());
+    this.bindPan();
+    this.bindHover();
+  },
+
+  // ---- right / middle button pan (every tool) ----
+
+  bindPan() {
+    const container = this.cy.container();
+
+    container.addEventListener("mousedown", (event) => this.panStart(event), true);
+    container.addEventListener("auxclick", (event) => event.preventDefault());
+    container.addEventListener("wheel", (event) => this.wheelZoom(event), { passive: false, capture: true });
+    window.addEventListener("mousemove", (event) => this.panMove(event));
+    window.addEventListener("mouseup", () => {
+      this.panDrag = null;
+    });
+    window.addEventListener("blur", () => {
+      this.panDrag = null;
+    });
+  },
+
+  // Cytoscape only zooms with the wheel while its own user panning is on (brick and link tools).
+  wheelZoom(event) {
+    if (this.cy.userPanningEnabled()) {
+      return;
+    }
+
+    const rect = this.cy.container().getBoundingClientRect();
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.cy.zoom({
+      level: this.cy.zoom() * Math.pow(2, -event.deltaY / 300),
+      renderedPosition: { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    });
+  },
+
+  panStart(event) {
+    this.panned = Boolean(this.linkDrag) && event.button === 2;
+
+    if (event.button === 1 || event.button === 2 || (event.button === 0 && this.current === "hand")) {
+      this.panDrag = { x: event.clientX, y: event.clientY, last: { x: event.clientX, y: event.clientY }, moved: false };
+      this.clearHover();
+
+      if (event.button === 1) {
+        event.preventDefault();
+      }
+    }
+  },
+
+  panMove(event) {
+    const drag = this.panDrag;
+
+    if (!drag) {
+      return;
+    }
+
+    if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) {
+      return;
+    }
+
+    drag.moved = true;
+    this.panned = true;
+    this.cy.panBy({ x: event.clientX - drag.last.x, y: event.clientY - drag.last.y });
+    drag.last = { x: event.clientX, y: event.clientY };
+  },
+
+  // ---- hover aura and tooltip (brick and link tools) ----
+
+  bindHover() {
+    const container = this.cy.container();
+
+    container.addEventListener("mousemove", (event) => this.hoverMove(event));
+    container.addEventListener("mouseleave", () => this.clearHover());
+    this.els.wrap.addEventListener("dragstart", (event) => event.preventDefault());
+  },
+
+  hoverMove(event) {
+    const current = this.current;
+
+    if (this.panDrag || this.moveDrag || this.linkDrag || (current !== "brick" && current !== "link")) {
+      return;
+    }
+
+    const node = this.nodeAt(event.clientX, event.clientY);
+
+    this.setHover(node);
+
+    if (current === "brick") {
+      this.showTip(event, node ? `Ajouter dans « ${this.labelOf(node.id())} »` : "Ajouter à la racine");
+    } else {
+      this.els.tip.hidden = true;
+    }
+  },
+
+  labelOf(id) {
+    const model = App.getModel();
+    const item = model && model.byId.get(id);
+
+    return item ? item.label : id;
+  },
+
+  setHover(node) {
+    if (node === this.hovered) {
+      return;
+    }
+
+    this.cy.nodes().removeClass("tool-hover");
+    this.hovered = node;
+
+    if (node) {
+      node.addClass("tool-hover");
+    }
+  },
+
+  showTip(event, text) {
+    const tip = this.els.tip;
+
+    tip.textContent = text;
+    tip.hidden = false;
+    tip.style.left = `${event.clientX + 14}px`;
+    tip.style.top = `${event.clientY + 18}px`;
+  },
+
+  clearHover() {
+    this.hovered = null;
+
+    if (this.cy) {
+      this.cy.nodes().removeClass("tool-hover");
+    }
+
+    if (this.els.tip) {
+      this.els.tip.hidden = true;
+    }
   },
 
   // ---- link tool ----
@@ -206,9 +356,11 @@ const Tools = {
       return;
     }
 
-    this.linkDrag = { source };
+    this.linkDrag = { source, shown: null };
+    this.els.tip.hidden = true;
     this.cy.userPanningEnabled(false);
     this.drawLine(event.renderedPosition);
+    this.showHovered(null);
   },
 
   // Deepest (smallest) node under a client point, or null.
@@ -236,14 +388,39 @@ const Tools = {
       return;
     }
 
+    if (!(event.buttons & 1)) {
+      this.cancelLink();
+      return;
+    }
+
     const rect = this.cy.container().getBoundingClientRect();
     const hover = this.nodeAt(event.clientX, event.clientY);
+
+    this.setHover(hover);
+    this.showHovered(hover);
 
     this.drawLine({ x: event.clientX - rect.left, y: event.clientY - rect.top });
     this.cy.nodes().removeClass("link-hover");
 
     if (hover && hover !== this.linkDrag.source) {
       hover.addClass("link-hover");
+    }
+  },
+
+  // While dragging a link, the inspector follows the hovered box (it cannot be clicked).
+  showHovered(hover) {
+    const id = hover ? hover.id() : this.linkDrag.source.id();
+
+    if (id === this.linkDrag.shown || !App.getModel() || !App.getModel().byId.has(id)) {
+      return;
+    }
+
+    this.linkDrag.shown = id;
+    App.setLinkHeader({ from: this.linkDrag.source.id(), to: hover && hover !== this.linkDrag.source ? id : null });
+    Inspector.showNode(id, App.getModel(), App.collapsed);
+
+    if (typeof App.showTab === "function") {
+      App.showTab("inspector");
     }
   },
 
@@ -254,7 +431,7 @@ const Tools = {
     this.els.line.setAttribute("y1", from.y);
     this.els.line.setAttribute("x2", point.x);
     this.els.line.setAttribute("y2", point.y);
-    this.els.overlay.hidden = false;
+    this.els.overlay.removeAttribute("hidden");
   },
 
   cancelLink() {
@@ -263,15 +440,22 @@ const Tools = {
     }
 
     this.linkDrag = null;
+    App.setLinkHeader(null);
     this.applyTool();
-    this.els.overlay.hidden = true;
+    this.hideLine();
     this.cy.nodes().removeClass("link-hover");
+    this.clearHover();
+  },
+
+  hideLine() {
+    this.els.overlay.setAttribute("hidden", "");
+    ["x1", "y1", "x2", "y2"].forEach((name) => this.els.line.setAttribute(name, 0));
   },
 
   linkEnd(event) {
     const drag = this.linkDrag;
 
-    if (!drag) {
+    if (!drag || event.button !== 0) {
       return;
     }
 
@@ -284,7 +468,7 @@ const Tools = {
     }
 
     if (target.id() === drag.source.id()) {
-      App.showMessage("Un lien vers soi-même est refusé.", "warning");
+      App.inspectNode(target.id(), { tab: "inspector", center: false });
       return;
     }
 

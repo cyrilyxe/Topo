@@ -78,6 +78,7 @@ const Help = {
       <h3>Édition graphique</h3>
       <ul>
         <li><strong>Outils</strong> (barre à gauche du graphe) : Sélection (<kbd>V</kbd>), Main (<kbd>H</kbd> ou <kbd>Espace</kbd> maintenu), Brique (<kbd>B</kbd> : clic sur une brique = nouvel enfant, sur le fond = brique racine), Lien (<kbd>L</kbd> : glisser d’une brique à une autre), Déplacer dans… (<kbd>M</kbd> : glisser une brique sur une autre pour l’y ranger, sur le fond pour la sortir à la racine, <kbd>Échap</kbd> annule).</li>
+        <li><strong>Navigation</strong> (tous les outils) : clic droit ou clic du milieu maintenu + glisser = déplacer la vue ; molette = zoom ; clic droit sans bouger = menu contextuel.</li>
         <li><strong>Sélection</strong> : clic, <kbd>Maj</kbd>/<kbd>Ctrl</kbd>+clic pour ajouter ou retirer, glisser sur le fond pour un rectangle. Le style s’applique à toute la sélection.</li>
         <li><strong>Suppression</strong> : <kbd>Suppr</kbd> ou menu contextuel. Les briques vont dans l’onglet <em>Corbeille</em> (bloc <code>trash:</code> du YAML) d’où on peut les restaurer.</li>
         <li><strong>Plans</strong> : menu contextuel d’une brique, <kbd>Ctrl+]</kbd> / <kbd>Ctrl+[</kbd> (avancer/reculer), avec <kbd>Maj</kbd> pour premier plan / arrière-plan. Une brique ne passe jamais sous son parent : l’action propose alors de l’appliquer au parent.</li>

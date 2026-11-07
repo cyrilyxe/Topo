@@ -149,6 +149,7 @@
     h("Réglages", "settings", ["reglages"], "objet", "Réglages figés dans le document (priorité maximale : défauts < topo.config.json < local < document). Menu Vue > Réglages.", "settings:\n  edges.curve: taxi\n  nodes.size: 1.2"),
     h("Réglages", "drop.repulsion", [], "booléen", "Au relâchement, la boîte déplacée se pose sans chevaucher ses frères (défaut : true).", "  drop.repulsion: true"),
     h("Réglages", "selection.tab", [], "keep | inspector | style", "Onglet affiché à la sélection d’un nœud (défaut : keep).", "  selection.tab: keep"),
+    h("Réglages", "editor.foldSync", [], "graph-to-editor | both | off", "Pliage synchronisé éditeur/graphe : graph-to-editor (défaut) plie le bloc children: dans l’éditeur quand un groupe est replié ; both agit aussi dans l’autre sens ; off désactive.", "  editor.foldSync: both"),
     h("Réglages", "edges.curve", [], "bezier | taxi | straight | round-taxi", "Forme des liens (défaut : bezier).", "  edges.curve: taxi"),
     h("Réglages", "edges.opacity", [], "nombre 0,15–1", "Opacité des liens (défaut : 1).", "  edges.opacity: 0.6"),
     h("Réglages", "nodes.size", [], "nombre 0,6–1,6", "Taille globale des nœuds (défaut : 1).", "  nodes.size: 1.2"),

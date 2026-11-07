@@ -6,6 +6,7 @@ const Inspector = {
   focusKey: null,
   query: "",
   queryNode: null,
+  multi: false,
 
   init(actions) {
     this.content = document.getElementById("inspector-content");
@@ -153,13 +154,13 @@ const Inspector = {
       </div>`;
   },
 
-  linksSection(id, model, isCollapsed, isGroup) {
+  linksSection(id, model, isCollapsed, isGroup, compact) {
     const all = this.classifyLinks(id, model);
     const pick = (kind) => all.filter((entry) => entry.kind === kind);
     const indirect = pick("indirect");
     const internal = pick("internal");
     const allActive = this.focusKey === `all:${id}`;
-    const focusAll = indirect.length
+    const focusAll = indirect.length && !compact
       ? `<button type="button" class="link-focus${allActive ? " active" : ""}" data-action="focus-all" data-id="${escapeHtml(id)}" aria-pressed="${allActive}" title="Déplier temporairement ce qu’il faut pour voir les extrémités réelles">${allActive ? "Quitter le focus" : "Focus sur tous les liens"}</button>`
       : "";
     let body;
@@ -180,10 +181,10 @@ const Inspector = {
     return `
       <section class="links-section">
         <h4>Liens</h4>
-        <div class="link-tools">
+        ${compact ? "" : `<div class="link-tools">
           <input id="link-filter" type="search" placeholder="Filtrer les liens…" value="${escapeHtml(this.queryNode === id ? this.query : "")}" aria-label="Filtrer les liens" />
           ${focusAll}
-        </div>
+        </div>`}
         <div class="link-scroll">${body}</div>
       </section>`;
   },
@@ -290,21 +291,13 @@ const Inspector = {
       </section>`;
   },
 
-  showNode(id, model, collapsed) {
-    const node = model && model.byId.get(id);
-
-    if (!node) {
-      this.clear();
-      return;
-    }
-
+  // Inspector body of one node; compact (multi-selection) drops the card editor and the link filter.
+  nodeBody(id, model, collapsed, compact) {
+    const node = model.byId.get(id);
     const isCollapsed = collapsed.has(id);
     const isGroup = node.children.length > 0;
 
-    this.content.innerHTML = `
-      <h3>${escapeHtml(node.label)}</h3>
-      <p class="path">${escapeHtml(Model.pathLabel(id, model))}</p>
-
+    return `
       <section>
         <h4>Identité</h4>
         <ul>
@@ -317,10 +310,10 @@ const Inspector = {
       </section>
 
       ${this.metaSection(node)}
-      ${this.cardSection(node)}
+      ${compact ? "" : this.cardSection(node)}
       ${this.resourcesSection(node)}
 
-      ${this.linksSection(id, model, isCollapsed, isGroup)}
+      ${this.linksSection(id, model, isCollapsed, isGroup, compact)}
 
       <div class="actions">
         ${isGroup ? `<button type="button" data-action="${isCollapsed ? "expand" : "collapse"}" data-id="${escapeHtml(id)}">${isCollapsed ? "Déplier" : "Replier"}</button>` : ""}
@@ -331,6 +324,18 @@ const Inspector = {
         ${Project.canEditSource(node) ? `<button type="button" data-action="edit-source" data-id="${escapeHtml(id)}">Éditer la source</button>` : ""}
       </div>
     `;
+  },
+
+  showNode(id, model, collapsed) {
+    const node = model && model.byId.get(id);
+
+    if (!node) {
+      this.clear();
+      return;
+    }
+
+    this.multi = false;
+    this.content.innerHTML = this.nodeBody(id, model, collapsed, false);
 
     if (this.queryNode !== id) {
       this.query = "";
@@ -338,6 +343,47 @@ const Inspector = {
     }
 
     this.applyFilter();
+  },
+
+  edgeBody(edge, model) {
+    const source = model.byId.get(edge.source);
+    const target = model.byId.get(edge.target);
+
+    return `
+      <section>
+        <ul>
+          <li>Origine : ${this.nodeButton(edge.source, model)}</li>
+          <li>Cible : ${this.nodeButton(edge.target, model)}</li>
+          <li>Étiquette : ${edge.label ? escapeHtml(edge.label) : "<span class=\"empty\">aucune</span>"}</li>
+          ${edge.isMeta ? "<li>Méta-arête : regroupe les liens des groupes repliés.</li>" : ""}
+        </ul>
+        <p class="path">${escapeHtml(source ? Model.pathLabel(source.id, model) : edge.source)} → ${escapeHtml(target ? Model.pathLabel(target.id, model) : edge.target)}</p>
+      </section>`;
+  },
+
+  MULTI_LIMIT: 20,
+
+  // One collapsible section per selected element: { nodes: [id], edges: [{ id, source, target, label, isMeta }] }.
+  showMany(selection, model, collapsed) {
+    const items = selection.nodes.filter((id) => model.byId.has(id)).map((id) => ({ node: id }))
+      .concat(selection.edges.map((edge) => ({ edge })));
+    const open = items.length <= 3 ? " open" : "";
+    const sections = items.slice(0, this.MULTI_LIMIT).map((item) => {
+      if (item.node) {
+        const node = model.byId.get(item.node);
+
+        return `<details class="multi-item"${open}><summary>${escapeHtml(node.label)}</summary>${this.nodeBody(item.node, model, collapsed, true)}</details>`;
+      }
+
+      const from = model.byId.get(item.edge.source);
+      const to = model.byId.get(item.edge.target);
+
+      return `<details class="multi-item"${open}><summary>Lien : ${escapeHtml(from ? from.label : item.edge.source)} → ${escapeHtml(to ? to.label : item.edge.target)}</summary>${this.edgeBody(item.edge, model)}</details>`;
+    });
+    const rest = items.length - sections.length;
+
+    this.multi = true;
+    this.content.innerHTML = sections.join("") + (rest > 0 ? `<p class="empty">… et ${rest} autres</p>` : "");
   },
 
   showLink(link, model) {
@@ -349,6 +395,7 @@ const Inspector = {
       return;
     }
 
+    this.multi = false;
     this.content.innerHTML = `
       <h3>Lien : ${escapeHtml(source.label)} → ${escapeHtml(target.label)}</h3>
       <p class="path">${escapeHtml(Model.pathLabel(source.id, model))} → ${escapeHtml(Model.pathLabel(target.id, model))}</p>
@@ -370,6 +417,7 @@ const Inspector = {
   },
 
   clear() {
+    this.multi = false;
     this.content.innerHTML = "<p class=\"empty\">Cliquez sur une ligne du YAML ou sur un nœud pour inspecter ses informations, ses liens et ses métadonnées.</p>";
   }
 };
