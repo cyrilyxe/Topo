@@ -1,0 +1,10 @@
+title: Artefact
+type: service
+nodes:
+  - id: resources
+    label: Ressources JS
+    type: service
+links:
+  - from: resources-js
+    to: platform.data.resources
+    label: publie

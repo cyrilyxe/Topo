@@ -1,0 +1,7 @@
+# Plateforme : domaine principal
+title: Plateforme
+type: group
+role: domain
+meta:
+  owner: Équipe Plateforme
+  show: [owner]

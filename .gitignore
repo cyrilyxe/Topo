@@ -1,76 +1,27 @@
-
-# =========================
-# --- Node.js ---
-# =========================
 node_modules/
-.npm/
-.yarn/
-.pnpm-store/
+dist/
+.claude
+*.txt
 
-# =========================
-# Private
-# =========================
+# Logs & debug
+*.log
+npm-debug.log*
 
+# Env / secrets
 .env
 .env.*
-!.env.example
-*.secret
-*.secrets
-secrets/
-credentials/
-config.local.*
-*.local
-*.pem
-*.key
-*.crt
-*.cer
-*.p12
-*.pfx
 
-# =========================
-# Development
-# =========================
-.vscode/
-.idea/
-*.code-workspace
-
-
-# =========================
-# --- Build / Generated ---
-# =========================
-dist/
-build/
-coverage/
-reports/
-output/
-outputs/
-.next/
-.nuxt/
-.svelte-kit/
-
-
-
-# =========================
-# Generic
-# =========================
-
-*.tmp
-*.temp
-*.bak
-*.swp
-*.swo
-*~
-tmp/
-temp/
-.cache/
-*.log
-logs/
-
-
-# =========================
-# --- Operating System ---
-# =========================
+# OS / editors
 .DS_Store
 Thumbs.db
 desktop.ini
+.vscode/
+.idea/
+*.swp
 
+# Test / coverage outputs
+coverage/
+.nyc_output/
+
+# Generated merge output of the demo (rebuilt by `topo build`)
+examples/**/architecture.yaml

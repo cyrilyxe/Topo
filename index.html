@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Topo</title>
+
+  <script>
+    (function () {
+      var theme = null;
+      try { theme = localStorage.getItem("topo:theme"); } catch (e) { /* storage unavailable */ }
+      if (theme !== "dark" && theme !== "light") {
+        theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css" />
+
+  <script src="https://unpkg.com/js-yaml@4.1.1/dist/js-yaml.min.js"></script>
+  <script src="https://unpkg.com/cytoscape@3.34.4/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
+  <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
+  <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-svg@0.4.0/cytoscape-svg.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/indent-fold.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/scroll/annotatescrollbar.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-logo" aria-hidden="true">◈</span>
+      <span class="brand-name">Topo</span>
+    </div>
+
+    <div class="doc-info">
+      <strong id="doc-name">Sans titre</strong>
+      <span id="dirty-marker" class="dirty-marker" title="Modifications non enregistrées" hidden>●</span>
+      <span id="doc-title" class="doc-title"></span>
+    </div>
+
+    <nav class="toolbar" aria-label="Barre d’outils">
+      <div class="dropdown">
+        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Fichier ▾</button>
+        <div class="dropdown-panel" role="menu" hidden>
+          <button type="button" role="menuitem" data-cmd="new">Nouveau</button>
+          <button type="button" role="menuitem" data-cmd="open">Ouvrir…<kbd>Ctrl+O</kbd></button>
+          <button type="button" role="menuitem" data-cmd="save">Enregistrer<kbd>Ctrl+S</kbd></button>
+          <button type="button" role="menuitem" data-cmd="save-as">Enregistrer sous…<kbd>Ctrl+Maj+S</kbd></button>
+          <hr />
+          <button type="button" role="menuitem" data-cmd="import-json">Importer JSON…</button>
+          <button type="button" role="menuitem" data-cmd="reset">Charger l’exemple</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Exporter ▾</button>
+        <div class="dropdown-panel" role="menu" hidden>
+          <button type="button" role="menuitem" data-cmd="export-svg">Image SVG</button>
+          <button type="button" role="menuitem" data-cmd="export-png">Image PNG</button>
+          <button type="button" role="menuitem" data-cmd="export-json">JSON</button>
+          <button type="button" role="menuitem" data-cmd="export-mermaid">Mermaid</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Projet ▾</button>
+        <div class="dropdown-panel" role="menu" hidden>
+          <button type="button" role="menuitem" id="btn-open-project" >Ouvrir un dossier de briques…</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Vue ▾</button>
+        <div class="dropdown-panel" role="menu" hidden>
+          <label class="menu-check">
+            <input id="opt-save-view" type="checkbox" checked />
+            Enregistrer la vue dans le fichier
+          </label>
+          <button type="button" role="menuitem" data-cmd="apply">Appliquer le YAML maintenant</button>
+          <button type="button" role="menuitem" data-cmd="relayout">Recalculer la disposition</button>
+          <button type="button" role="menuitem" data-cmd="reset-view">Réinitialiser la vue</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="header-right">
+      <input id="search" type="search" placeholder="Rechercher : clients, [Cc]lients ou /clients/i" aria-label="Rechercher dans le diagramme" />
+      <button id="btn-theme" type="button" class="icon-btn" title="Basculer thème clair / sombre" aria-label="Basculer le thème">◐</button>
+      <button id="btn-help" type="button" class="icon-btn" title="Aide (F1)" aria-label="Aide">?</button>
+    </div>
+  </header>
+
+  <main class="app-layout">
+    <section class="editor-panel">
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" role="tab" data-tab="editor">Éditeur</button>
+        <button type="button" class="tab" role="tab" data-tab="inspector">Inspecteur</button>
+        <button type="button" class="tab" role="tab" data-tab="style">Style</button>
+        <button type="button" class="tab" role="tab" data-tab="anomalies">Anomalies <span id="anomaly-badge" class="badge" hidden>0</span></button>
+        <button type="button" class="tab" role="tab" data-tab="project" id="tab-project" hidden>Projet</button>
+      </div>
+
+      <div id="pane-editor" class="pane active" role="tabpanel">
+        <textarea id="yaml-editor" spellcheck="false"></textarea>
+      </div>
+
+      <div id="pane-inspector" class="pane" role="tabpanel" hidden>
+        <div id="inspector-content" class="pane-content">
+          <p class="empty">Cliquez sur une ligne du YAML ou sur un nœud pour inspecter ses informations, ses liens et ses métadonnées.</p>
+        </div>
+      </div>
+
+      <div id="pane-style" class="pane" role="tabpanel" hidden>
+        <div id="style-content" class="pane-content"></div>
+      </div>
+
+      <div id="pane-anomalies" class="pane" role="tabpanel" hidden>
+        <div id="anomalies-content" class="pane-content"></div>
+      </div>
+
+      <div id="pane-project" class="pane" role="tabpanel" hidden>
+        <div id="project-content" class="pane-content"></div>
+      </div>
+
+      <div id="project-banner" class="project-banner" hidden></div>
+      <div id="message" class="message" role="status"></div>
+    </section>
+
+    <div id="splitter" class="splitter" title="Glissez pour redimensionner"></div>
+
+    <section class="graph-panel">
+      <div class="graph-toolbar">
+        <label class="size-control">
+          Taille
+          <input id="node-size" type="range" min="0.6" max="1.6" step="0.05" value="1" />
+        </label>
+
+        <button id="btn-zoom-in" type="button" class="icon-btn" title="Zoom avant" aria-label="Zoom avant">＋</button>
+        <button id="btn-zoom-out" type="button" class="icon-btn" title="Zoom arrière" aria-label="Zoom arrière">－</button>
+        <button id="btn-fit" type="button">Ajuster</button>
+        <button id="btn-collapse-all" type="button">Tout replier</button>
+        <button id="btn-expand-all" type="button">Tout déplier</button>
+
+        <label class="layout-control">
+          Disposition
+          <select id="layout-select" aria-describedby="layout-help">
+            <option value="fcose" title="Force dirigée optimisée pour les groupes imbriqués (recommandé)">fcose (groupes)</option>
+            <option value="cose" title="Force dirigée classique, plus lente, peut faire chevaucher les groupes">cose</option>
+            <option value="breadthfirst" title="Arbre hiérarchique par niveaux, suit le sens des liens">breadthfirst</option>
+            <option value="grid" title="Grille régulière">grid</option>
+            <option value="circle" title="Nœuds sur un cercle">circle</option>
+            <option value="concentric" title="Cercles concentriques, les nœuds les plus connectés au centre">concentric</option>
+          </select>
+          <span id="layout-help" class="layout-help" tabindex="0" title="">ⓘ</span>
+        </label>
+      </div>
+
+      <div class="graph-wrap">
+        <div id="cy"></div>
+        <div id="meta-card" class="meta-card" hidden></div>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot group"></i> Groupe</span>
+        <span><i class="dot t-service"></i> Service</span>
+        <span><i class="dot t-database"></i> Base de données</span>
+        <span><i class="dot t-application"></i> Application</span>
+        <span><i class="dot t-external"></i> Externe</span>
+        <span><i class="dot t-queue"></i> File / queue</span>
+        <span><i class="dot t-default"></i> Autre</span>
+        <span><i class="dot collapsed"></i> Groupe replié</span>
+        <span><i class="dot meta"></i> Méta-arête</span>
+        <span><i class="dot search"></i> Résultat de recherche</span>
+      </div>
+    </section>
+  </main>
+
+  <div id="context-menu" class="context-menu" hidden></div>
+
+  <div id="help-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title" tabindex="-1">
+      <div class="modal-header">
+        <h2 id="help-title">Aide</h2>
+        <button type="button" class="icon-btn" id="btn-help-close" aria-label="Fermer l’aide">✕</button>
+      </div>
+      <div id="help-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="js/schema.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/merge.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/files.js"></script>
+  <script src="js/style.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/inspector.js"></script>
+  <script src="js/style-ui.js"></script>
+  <script src="js/anomalies.js"></script>
+  <script src="js/help.js"></script>
+  <script src="js/project.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

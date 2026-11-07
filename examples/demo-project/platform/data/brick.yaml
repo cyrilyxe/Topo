@@ -1,0 +1,12 @@
+title: Données
+role: category
+nodes:
+  - id: database
+    label: Base de données
+    type: database
+  - id: resources
+    label: Ressources (stockage)
+    type: database
+links:
+  - from: resources
+    to: database

@@ -1,0 +1,6 @@
+title: Application web
+type: application
+links:
+  - from: web
+    to: api
+    label: requêtes HTTPS
