@@ -86,3 +86,15 @@ La CLI `build`/`check`/`fix` fonctionne aussi sans `node_modules` (js-yaml est p
 - `js/editor.js`, `js/graph.js`, `js/inspector.js` : éditeur, graphe Cytoscape, inspecteur
 - `js/style.js`, `js/style-ui.js` : application et édition des règles de style
 - `js/files.js`, `js/help.js`, `js/anomalies.js` : fichiers, aide, anomalies
+
+## Utiliser Topo avec Claude (ou une autre IA)
+
+Le skill [`skills/topo/SKILL.md`](skills/topo/SKILL.md) explique à Claude comment produire une carte Topo d'un projet (un fichier ou des `brick.yaml`) et comment appliquer au projet les changements que vous faites dans Topo.
+
+Installation pour tous vos projets (Claude Code) :
+
+```bash
+mkdir -p ~/.claude/skills/topo && cp skills/topo/SKILL.md ~/.claude/skills/topo/
+```
+
+Ou pour un seul projet : copiez le dossier dans `<projet>/.claude/skills/topo/`. Pour une autre IA, collez simplement le contenu du fichier dans son contexte.
