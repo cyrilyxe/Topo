@@ -40,8 +40,46 @@ const Project = {
     window.addEventListener("keydown", (event) => this.onUndoKey(event), true);
   },
 
+  STATE_KEYS: ["isOpen", "root", "readOnly", "folder", "bricks", "anomalies", "mode", "sourcePath", "known", "snapshot", "lastScan", "undoStack", "redoStack", "pendingFiles"],
+
+  // Document tabs: a project lives in one tab at a time; these swap its state in and out.
+  captureState() {
+    if (!this.isOpen) {
+      return null;
+    }
+
+    const state = { hook: App.saveHook };
+
+    this.STATE_KEYS.forEach((key) => { state[key] = this[key]; });
+    return state;
+  },
+
+  resetState() {
+    clearInterval(this.timer);
+    this.timer = null;
+    Object.assign(this, {
+      isOpen: false, root: null, readOnly: false, folder: "", bricks: [], anomalies: [], mode: null, sourcePath: null,
+      known: new Map(), snapshot: new Map(), undoStack: [], redoStack: [], pendingFiles: null
+    });
+    App.onSave(null);
+
+    if (this.els.tab) {
+      this.els.tab.hidden = true;
+      this.els.banner.hidden = true;
+      this.els.content.innerHTML = "";
+    }
+  },
+
+  applyState(state) {
+    this.STATE_KEYS.forEach((key) => { this[key] = state[key]; });
+    this.els.tab.hidden = false;
+    this.render();
+    App.saveHook = state.hook || null;
+    this.startPolling();
+  },
+
   async open() {
-    if (!App.confirmDiscard()) {
+    if (typeof Tabs !== "undefined" && !Tabs.canOpenProject()) {
       return;
     }
 
@@ -52,6 +90,10 @@ const Project = {
 
       if (!loaded) {
         return;
+      }
+
+      if (typeof Tabs !== "undefined") {
+        Tabs.prepareNew();
       }
 
       this.isOpen = true;

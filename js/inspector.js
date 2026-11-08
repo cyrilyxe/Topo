@@ -20,6 +20,11 @@ const Inspector = {
         return;
       }
 
+      if (event.target.closest("button[data-bulk]")) {
+        this.applyBulk();
+        return;
+      }
+
       const button = event.target.closest("button[data-action]");
 
       if (button) {
@@ -383,7 +388,79 @@ const Inspector = {
     const rest = items.length - sections.length;
 
     this.multi = true;
-    this.content.innerHTML = sections.join("") + (rest > 0 ? `<p class="empty">… et ${rest} autres</p>` : "");
+    this.bulkIds = selection.nodes.filter((id) => model.byId.has(id));
+    this.content.innerHTML = this.bulkSection(this.bulkIds, model) + sections.join("") + (rest > 0 ? `<p class="empty">… et ${rest} autres</p>` : "");
+  },
+
+  // Bulk edit block shown when 2+ bricks are selected: type, role and one meta key for all of them.
+  bulkSection(ids, model) {
+    if (ids.length < 2) {
+      return "";
+    }
+
+    const unique = (values) => Array.from(new Set(values.filter(Boolean))).sort();
+    const types = unique(["service", "database", "application", "external", "queue", "group"].concat(model.nodes.map((n) => n.type)));
+    const roles = unique(model.nodes.map((n) => n.role));
+    const keys = unique([].concat(...model.nodes.map((n) => Object.keys(n.meta || {}))));
+    const option = (value) => `<option value="${escapeHtml(value)}"></option>`;
+
+    return `<section class="bulk-edit">
+      <h4>Modifier la sélection (${ids.length})</h4>
+      <div class="form-grid">
+        <label>Type <input id="bulk-type" type="text" list="bulk-types" placeholder="inchangé" autocomplete="off" /></label>
+        <label>Rôle <input id="bulk-role" type="text" list="bulk-roles" placeholder="inchangé" autocomplete="off" /></label>
+        <label>Meta : clé <input id="bulk-meta-key" type="text" list="bulk-meta-keys" placeholder="ex. owner" autocomplete="off" /></label>
+        <label>Meta : valeur <input id="bulk-meta-value" type="text" placeholder="vide = supprimer la clé" autocomplete="off" /></label>
+      </div>
+      <datalist id="bulk-types">${types.map(option).join("")}</datalist>
+      <datalist id="bulk-roles">${roles.map(option).join("")}</datalist>
+      <datalist id="bulk-meta-keys">${keys.map(option).join("")}</datalist>
+      <div class="actions"><button type="button" data-bulk="apply">Appliquer à la sélection</button></div>
+    </section>`;
+  },
+
+  // One history entry for the whole selection.
+  applyBulk() {
+    const value = (id) => {
+      const field = document.getElementById(id);
+
+      return field ? field.value.trim() : "";
+    };
+    const ids = (this.bulkIds || []).slice();
+    const patch = {};
+    const key = value("bulk-meta-key");
+
+    if (value("bulk-type")) {
+      patch.type = value("bulk-type");
+    }
+
+    if (value("bulk-role")) {
+      patch.role = value("bulk-role");
+    }
+
+    if (key) {
+      patch.meta = { [key]: value("bulk-meta-value") || null };
+    }
+
+    if (ids.length < 2 || !Object.keys(patch).length) {
+      return;
+    }
+
+    App.edit(`Modifier ${ids.length} briques`, (text) => {
+      const model = Model.parse(text);
+
+      return ids.reduce((current, id) => {
+        const own = Object.assign({}, patch);
+        const node = model.byId.get(id);
+
+        // Removing a meta key a brick does not have is a no-op.
+        if (own.meta && own.meta[key] === null && !(node && node.meta && Object.prototype.hasOwnProperty.call(node.meta, key))) {
+          delete own.meta;
+        }
+
+        return Object.keys(own).length ? DocEdit.updateNode(current, id, own) : current;
+      }, text);
+    });
   },
 
   showLink(link, model) {

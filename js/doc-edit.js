@@ -331,14 +331,45 @@
     if (!YAML.isMap(view)) return out;
     const collapsed = getNode(view, "collapsed");
     if (YAML.isSeq(collapsed)) collapsed.items.forEach((it) => { if (YAML.isScalar(it)) out.push({ ref: it.value, set: (v) => { it.value = v; } }); });
-    const positions = getNode(view, "positions");
-    if (YAML.isMap(positions)) {
-      positions.items.forEach((p) => {
-        if (!YAML.isScalar(p.key)) p.key = new YAML.Scalar(p.key);
-        out.push({ ref: p.key.value, set: (v) => { p.key.value = v; } });
-      });
-    }
+    const viewRefs = (holder) => {
+      const hidden = getNode(holder, "collapsed");
+      if (holder !== view && YAML.isSeq(hidden)) hidden.items.forEach((it) => { if (YAML.isScalar(it)) out.push({ ref: it.value, set: (v) => { it.value = v; } }); });
+      const positions = getNode(holder, "positions");
+      if (YAML.isMap(positions)) {
+        positions.items.forEach((p) => {
+          if (!YAML.isScalar(p.key)) p.key = new YAML.Scalar(p.key);
+          out.push({ ref: p.key.value, set: (v) => { p.key.value = v; } });
+        });
+      }
+    };
+    viewRefs(view);
+    const layouts = getNode(view, "layouts");
+    if (YAML.isMap(layouts)) layouts.items.forEach((p) => { if (YAML.isMap(p.value)) viewRefs(p.value); });
+    trashRefs(ctx, out);
     return out;
+  }
+
+  // Ids kept by trashed entries (parent, ids, links) follow renames and moves too.
+  function trashRefs(ctx, out) {
+    const trash = getNode(ctx.root, "trash");
+    if (!YAML.isSeq(trash)) return;
+    const scalarIn = (holder, key) => {
+      const pair = findPair(holder, [key]);
+      if (pair && YAML.isScalar(pair.value)) out.push({ ref: pair.value.value, set: (v) => { pair.value.value = v; } });
+    };
+    trash.items.forEach((entry) => {
+      if (!YAML.isMap(entry)) return;
+      scalarIn(entry, "parent");
+      const ids = findPair(entry, ["ids"]);
+      if (ids && YAML.isSeq(ids.value)) ids.value.items.forEach((it) => { if (YAML.isScalar(it)) out.push({ ref: it.value, set: (v) => { it.value = v; } }); });
+      const links = findPair(entry, ["links"]);
+      if (links && YAML.isSeq(links.value)) {
+        links.value.items.forEach((l) => {
+          const link = YAML.isMap(l) ? findPair(l, ["link"]) : null;
+          if (link && YAML.isMap(link.value)) { scalarIn(link.value, "from"); scalarIn(link.value, "to"); }
+        });
+      }
+    });
   }
 
   // Rewrites references whose resolution changed because a subtree moved (qualified paths changed).
@@ -374,6 +405,145 @@
     const map = movedIdMap(ctx.model, after, id, newQ);
     rewriteRefs(ctx, ctx.model, after, map);
     return dump(ctx.doc);
+  }
+
+  // ---------- ids: generation (pure) and renaming ----------
+
+  const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  function slugify(text) {
+    return String(text === undefined || text === null ? "" : text)
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  const ID_SCHEMES = ["slug", "parent-slug", "type-n"];
+
+  // info: { label, type, parent (local id of the parent or null) }.
+  function idBase(scheme, info) {
+    const slug = slugify(info && info.label) || "brique";
+    if (scheme === "type-n") return slugify(info && info.type) || "brique";
+    if (scheme === "parent-slug" && info && info.parent) return `${info.parent}-${slug}`;
+    return slug;
+  }
+
+  // taken: Set of ids already used. The result is never in it.
+  function autoId(scheme, info, taken) {
+    const base = idBase(scheme, info);
+    const used = taken instanceof Set ? taken : new Set(taken || []);
+    if (scheme === "type-n") {
+      const re = new RegExp(`^${escapeRe(base)}-(\\d+)$`);
+      let n = 1;
+      used.forEach((id) => { const m = re.exec(id); if (m) n = Math.max(n, Number(m[1]) + 1); });
+      while (used.has(`${base}-${n}`)) n += 1;
+      return `${base}-${n}`;
+    }
+    let candidate = base;
+    for (let n = 2; used.has(candidate); n += 1) candidate = `${base}-${n}`;
+    return candidate;
+  }
+
+  // True when `id` is what the scheme would have produced (possibly with a -2, -3 suffix).
+  function isAutoId(scheme, info, id) {
+    const base = idBase(scheme, info);
+    const suffixed = new RegExp(`^${escapeRe(base)}-\\d+$`).test(String(id));
+    return scheme === "type-n" ? suffixed : String(id) === base || suffixed;
+  }
+
+  function usedIds(model, except) {
+    const used = new Set();
+    model.nodes.forEach((n) => { if (n !== except) [n.id, n.localId, n.qualifiedId].forEach((v) => used.add(v)); });
+    return used;
+  }
+
+  function renameId(text, oldId, newId) {
+    const next = String(newId === undefined || newId === null ? "" : newId).trim();
+    const ctx = open(text);
+    const entry = entryOf(ctx, oldId);
+    const node = ctx.model.byId.get(oldId);
+    if (!/^[A-Za-z0-9_-]+$/.test(next)) throw new Error("Identifiant invalide : lettres, chiffres, - et _ uniquement.");
+    if (next === node.localId) return String(text);
+    if (usedIds(ctx.model, node).has(next)) throw new Error(`L’identifiant « ${next} » existe déjà.`);
+
+    const raw = YAML.isMap(entry.map) && entry.map.get("id") !== undefined && entry.map.get("id") !== null ? String(entry.map.get("id")).trim() : "";
+    const newRaw = raw.includes(".") ? `${raw.slice(0, raw.lastIndexOf(".") + 1)}${next}` : next;
+    const parentQ = node.parent ? ctx.model.byId.get(node.parent).qualifiedId : null;
+    const newQ = raw.includes(".") || !parentQ ? newRaw : `${parentQ}.${newRaw}`;
+    const scalar = entry.map.get("id", true);
+    if (YAML.isScalar(scalar)) scalar.value = newRaw;
+    else entry.map.set("id", newRaw);
+
+    const after = Model.parse(dump(ctx.doc));
+    rewriteRefs(ctx, ctx.model, after, movedIdMap(ctx.model, after, oldId, newQ));
+    return dump(ctx.doc);
+  }
+
+  // Rewrites every reference written `oldRef` (or ending with `.oldRef`) to `newRef`; for ids already renamed by hand.
+  function renameRefs(text, oldRef, newRef) {
+    const doc = load(text);
+    const ctx = { doc, root: doc.contents };
+    refTargets(ctx).forEach((t) => {
+      const ref = String(t.ref);
+      if (ref === oldRef) t.set(newRef);
+      else if (ref.endsWith(`.${oldRef}`)) t.set(`${ref.slice(0, ref.length - oldRef.length)}${newRef}`);
+    });
+    return dump(doc);
+  }
+
+  // After an edit that may have changed what the scheme produces (label, type, parent), re-generates the id of a
+  // node whose id was still automatic. textBefore/textAfter: documents around the edit; returns the final text.
+  function followId(textBefore, textAfter, id, scheme) {
+    const before = Model.parse(String(textBefore));
+    const node = before.byId.get(id);
+    if (!node) return textAfter;
+    const parentOf = (model, n) => (n.parent ? model.byId.get(n.parent).localId : null);
+    if (!isAutoId(scheme, { label: node.label, type: node.type, parent: parentOf(before, node) }, node.localId)) return textAfter;
+    const after = Model.parse(String(textAfter));
+    let cand = after.byId.get(id);
+    if (!cand || cand.localId !== node.localId) {
+      const same = after.nodes.filter((n) => n.localId === node.localId);
+      cand = same.length === 1 ? same[0] : null;
+    }
+    if (!cand) return textAfter;
+    const info = { label: cand.label, type: cand.type, parent: parentOf(after, cand) };
+    if (isAutoId(scheme, info, cand.localId)) return textAfter;
+    const fresh = autoId(scheme, info, usedIds(after, cand));
+    return fresh === cand.localId ? textAfter : renameId(textAfter, cand.id, fresh);
+  }
+
+  // ---------- copy ----------
+
+  // Complete subtrees of the selected nodes plus the links whose two ends are inside them.
+  // Ids used by the payload links are paths inside the payload (a top-level copied node is a root).
+  function exportNodes(text, ids) {
+    const ctx = open(text);
+    ids.forEach((id) => entryOf(ctx, id));
+    const roots = topMost(ctx.model, ids);
+    const pathOf = new Map();
+    const walkIds = (internal, prefix) => {
+      const model = ctx.model.byId.get(internal);
+      const path = prefix ? `${prefix}.${model.localId}` : model.localId;
+      pathOf.set(internal, path);
+      model.children.forEach((c) => walkIds(c, path));
+    };
+    const nodes = roots.map((id) => {
+      walkIds(id, "");
+      return entryOf(ctx, id).map.toJSON();
+    });
+    const links = [];
+    rawLinks(ctx).forEach((item) => {
+      const from = endpoint(ctx, item, "from");
+      const to = endpoint(ctx, item, "to");
+      if (from === null || to === null || !pathOf.has(from) || !pathOf.has(to)) return;
+      const json = item.toJSON();
+      json[keyName(findPair(item, namesOf("from")))] = pathOf.get(from);
+      json[keyName(findPair(item, namesOf("to")))] = pathOf.get(to);
+      links.push(json);
+    });
+    return { nodes, links };
   }
 
   function reorder(text, id, op) {
@@ -505,5 +675,5 @@
     return dump(ctx.doc);
   }
 
-  return { addNode, updateNode, removeNodes, moveNode, reorder, addLink, updateLink, removeLinks, setTopLevel, trashPush, trashRestore };
+  return { addNode, updateNode, removeNodes, moveNode, renameId, renameRefs, followId, exportNodes, slugify, autoId, isAutoId, ID_SCHEMES, reorder, addLink, updateLink, removeLinks, setTopLevel, trashPush, trashRestore };
 });

@@ -79,6 +79,11 @@ const App = {
 
     this.name = options.name || null;
     Files.current = { name: this.name, handle: options.handle || null };
+    this.viewOverride = options.view || null;
+
+    if (typeof Layouts !== "undefined") {
+      Layouts.active = null;
+    }
 
     this.loading = true;
     Editor.setValue(String(text));
@@ -223,6 +228,10 @@ const App = {
     this.store(`topo:text:${key}`, Editor.getValue());
     this.store(`topo:dirty:${key}`, this.dirty ? "1" : "0");
     this.store("topo:last", key);
+
+    if (typeof Tabs !== "undefined") {
+      Tabs.persistSoon();
+    }
   },
 
   loadLocalView() {
@@ -247,6 +256,14 @@ const App = {
 
     view.pinned = Graph.pinned;
     this.store(`topo:view:${this.docKey()}`, JSON.stringify(view));
+
+    if (typeof Layouts !== "undefined") {
+      Layouts.refresh();
+    }
+
+    if (typeof Tabs !== "undefined") {
+      Tabs.persistSoon();
+    }
   },
 
   // forFile: only write positions when the user pinned nodes by dragging.
@@ -367,9 +384,33 @@ const App = {
   },
 
   restoreView(model) {
-    const fromFile = this.hasViewData(model.view);
-    const view = (fromFile ? model.view : this.loadLocalView()) || {};
+    const override = this.viewOverride;
 
+    this.viewOverride = null;
+
+    const fromFile = !override && this.hasViewData(model.view);
+    const view = override || (fromFile ? model.view : this.loadLocalView()) || {};
+
+    return this.applyViewObject(view, fromFile);
+  },
+
+  // Applies a view object (tab state, named layout) without replaying any automatic layout.
+  applyView(view) {
+    if (!this.model) {
+      return false;
+    }
+
+    this.dropFocus();
+
+    const viewport = this.applyViewObject(view, false);
+
+    this.render({ initial: true, viewport });
+    this.schedulePersistView();
+
+    return true;
+  },
+
+  applyViewObject(view, fromFile) {
     this.layout = this.LAYOUTS.includes(view.layout) ? view.layout : "fcose";
     this.els.layoutSelect.value = this.layout;
     this.updateLayoutHelp();
@@ -488,6 +529,10 @@ const App = {
     this.els.docTitle.textContent = this.model && this.model.title ? this.model.title : "";
     this.els.dirty.hidden = !this.dirty;
     document.title = `${this.dirty ? "● " : ""}${name} — Topo`;
+
+    if (typeof Tabs !== "undefined") {
+      Tabs.render();
+    }
   },
 
   confirmDiscard() {
@@ -1029,6 +1074,9 @@ const App = {
 
     actions.push(
       { label: "Modifier…", run: () => Tools.editNode(id) },
+      { label: "Copier", run: () => Clipboard.copy(this.menuTargets(id)) },
+      { label: "Couper", run: () => Clipboard.cut(this.menuTargets(id)) },
+      { label: `Coller dans « ${node.label || id} »`, run: () => Clipboard.paste(id) },
       { label: "Ajouter un enfant…", run: () => Tools.addBrick(id) },
       { label: "Afficher la fiche", run: () => this.showCard(id) },
       { label: "Inspecter", run: () => this.inspectNode(id, { tab: "inspector" }) },
@@ -1058,6 +1106,11 @@ const App = {
     actions.push({ separator: true, label: "Supprimer…", run: () => Tools.requestDelete(Tools.selection().nodes.includes(id) ? undefined : [id]) });
 
     this.openMenu(position, node.label || id, actions);
+  },
+
+  // Nodes a context-menu copy/cut applies to: the whole selection when the clicked node belongs to it.
+  menuTargets(id) {
+    return Tools.selection().nodes.includes(id) ? Tools.selection().nodes : [id];
   },
 
   edgeMenu(edgeId, position) {
@@ -1093,6 +1146,7 @@ const App = {
   backgroundMenu(position) {
     this.openMenu(position, "Diagramme", [
       { label: "Nouvelle brique racine…", run: () => Tools.addBrick(null) },
+      { label: "Coller à la racine", run: () => Clipboard.paste(null) },
       { separator: true, label: "Zoom avant", run: () => Graph.zoomIn() },
       { label: "Zoom arrière", run: () => Graph.zoomOut() },
       { label: "Ajuster la vue", run: () => Graph.fit() },
@@ -1130,7 +1184,14 @@ const App = {
     }
 
     try {
-      return Model.replaceTopLevelBlock(text, "view", this.getViewObject(true));
+      const view = this.getViewObject(true);
+      const layouts = Layouts.readAll(text);
+
+      if (Object.keys(layouts).length) {
+        view.layouts = layouts;
+      }
+
+      return Model.replaceTopLevelBlock(text, "view", view);
     } catch (error) {
       console.warn("Bloc view non écrit :", error);
       return text;
@@ -1138,23 +1199,15 @@ const App = {
   },
 
   async newDocument() {
-    if (!this.confirmDiscard()) {
-      return;
-    }
-
-    this.loadText(this.NEW_DOCUMENT, { name: null, dirty: false });
+    Tabs.newTab();
   },
 
   async openFile() {
-    if (!this.confirmDiscard()) {
-      return;
-    }
-
     try {
       const result = await Files.open();
 
       if (result) {
-        this.loadText(result.text, { name: result.name, handle: result.handle });
+        Tabs.openDocument(result.text, { name: result.name, handle: result.handle });
         this.showMessage(`« ${result.name} » ouvert.`, "success");
       }
     } catch (error) {
@@ -1259,6 +1312,9 @@ const App = {
       "save": () => this.save(false),
       "save-as": () => this.save(true),
       "import-json": () => this.openFile(),
+      "close-tab": () => Tabs.close(),
+      "next-tab": () => Tabs.step(1),
+      "prev-tab": () => Tabs.step(-1),
       "reset": () => {
         if (this.confirmDiscard()) {
           this.loadText(Model.DEFAULT_YAML, { name: null, dirty: false });
@@ -1530,6 +1586,12 @@ const App = {
       } else if (mod && key === "o") {
         event.preventDefault();
         this.openFile();
+      } else if (mod && key === "w" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        Tabs.close();
+      } else if (event.ctrlKey && key === "tab") {
+        event.preventDefault();
+        Tabs.step(event.shiftKey ? -1 : 1);
       } else if (event.key === "F1") {
         event.preventDefault();
         Help.open();
@@ -1542,7 +1604,9 @@ const App = {
     });
 
     window.addEventListener("beforeunload", (event) => {
-      if (this.dirty) {
+      Tabs.flush();
+
+      if (this.dirty || Tabs.anyDirty()) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -1663,6 +1727,12 @@ const App = {
     SettingsUI.init();
     this.initSplitter();
     this.bindUi();
+    Layouts.init();
+    Tabs.init();
+
+    if (Tabs.restore()) {
+      return;
+    }
 
     const last = this.read("topo:last");
     const text = last ? this.read(`topo:text:${last}`) : null;
@@ -1675,6 +1745,8 @@ const App = {
     } else {
       this.loadText(Model.DEFAULT_YAML, { name: null, dirty: false });
     }
+
+    Tabs.start();
   }
 };
 

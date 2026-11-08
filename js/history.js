@@ -57,6 +57,17 @@
       };
     },
 
+    // Copy of the internal stacks (document tabs keep one per tab).
+    snapshot() {
+      return { past: past.slice(), future: future.slice() };
+    },
+
+    restore(saved) {
+      past = saved && Array.isArray(saved.past) ? saved.past.slice() : [];
+      future = saved && Array.isArray(saved.future) ? saved.future.slice() : [];
+      notify();
+    },
+
     clear() {
       past = [];
       future = [];

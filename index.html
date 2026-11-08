@@ -59,10 +59,13 @@
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Fichier ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
-          <button type="button" role="menuitem" data-cmd="new">Nouveau</button>
+          <button type="button" role="menuitem" data-cmd="new">Nouveau (nouvel onglet)</button>
           <button type="button" role="menuitem" data-cmd="open">Ouvrir…<kbd>Ctrl+O</kbd></button>
           <button type="button" role="menuitem" data-cmd="save">Enregistrer<kbd>Ctrl+S</kbd></button>
           <button type="button" role="menuitem" data-cmd="save-as">Enregistrer sous…<kbd>Ctrl+Maj+S</kbd></button>
+          <button type="button" role="menuitem" data-cmd="close-tab">Fermer l’onglet<kbd>Ctrl+W</kbd></button>
+          <button type="button" role="menuitem" data-cmd="next-tab">Onglet suivant<kbd>Ctrl+Tab</kbd></button>
+          <button type="button" role="menuitem" data-cmd="prev-tab">Onglet précédent<kbd>Ctrl+Maj+Tab</kbd></button>
           <hr />
           <button type="button" role="menuitem" data-cmd="import-json">Importer JSON…</button>
           <button type="button" role="menuitem" data-cmd="reset">Charger l’exemple</button>
@@ -100,6 +103,9 @@
           <button type="button" role="menuitem" data-cmd="relayout">Recalculer la disposition</button>
           <button type="button" role="menuitem" data-cmd="reset-view">Réinitialiser la vue</button>
           <hr />
+          <button type="button" id="layouts-toggle" class="menu-sub-toggle" aria-expanded="false" aria-controls="layouts-menu">Dispositions ▾</button>
+          <div id="layouts-menu" class="menu-sub-panel" hidden></div>
+          <hr />
           <button type="button" role="menuitem" data-cmd="settings">Réglages…</button>
         </div>
       </div>
@@ -112,6 +118,8 @@
       <button id="btn-help" type="button" class="icon-btn" title="Aide (F1)" aria-label="Aide">?</button>
     </div>
   </header>
+
+  <div id="doc-tabs" class="doc-tabs" role="tablist" aria-label="Documents ouverts"></div>
 
   <main class="app-layout">
     <section class="editor-panel">
@@ -197,6 +205,7 @@
           <button id="btn-relayout" type="button" class="icon-btn" title="Rejouer la disposition" aria-label="Rejouer la disposition">↻</button>
           <span id="layout-help" class="layout-help" tabindex="0" title="">ⓘ</span>
         </label>
+        <span id="layout-badge" class="layout-badge" hidden></span>
       </div>
 
       <div class="graph-wrap">
@@ -206,21 +215,22 @@
         <div id="tools-help" class="tools-help" aria-live="polite"></div>
       </div>
 
-      <div class="legend">
-        <span><i class="dot group"></i> Groupe</span>
-        <span><i class="dot t-service"></i> Service</span>
-        <span><i class="dot t-database"></i> Base de données</span>
-        <span><i class="dot t-application"></i> Application</span>
-        <span><i class="dot t-external"></i> Externe</span>
-        <span><i class="dot t-queue"></i> File / queue</span>
-        <span><i class="dot t-default"></i> Autre</span>
-        <span><i class="dot collapsed"></i> Groupe replié</span>
-        <span><i class="dot meta"></i> Méta-arête</span>
-        <span><i class="dot search"></i> Résultat de recherche</span>
-        <span class="hidden-box">
-          <button id="hidden-indicator" type="button" class="hidden-indicator" aria-haspopup="true" aria-expanded="false" hidden></button>
-          <div id="hidden-list" class="hidden-list" hidden></div>
-        </span>
+      <div id="legend" class="legend">
+        <div id="legend-resize" class="legend-resize" title="Glisser pour redimensionner la légende" aria-hidden="true"></div>
+        <div class="legend-bar">
+          <button id="legend-toggle" type="button" class="legend-toggle" aria-expanded="true" aria-controls="legend-body" title="Replier / déplier la légende">▾</button>
+          <strong class="legend-heading">Légende</strong>
+          <select id="legend-scope" class="legend-scope" aria-label="Valeurs affichées dans la légende">
+            <option value="used">utilisés seulement</option>
+            <option value="all">tout</option>
+          </select>
+          <span id="legend-filter" class="legend-filter"></span>
+          <span class="hidden-box">
+            <button id="hidden-indicator" type="button" class="hidden-indicator" aria-haspopup="true" aria-expanded="false" hidden></button>
+            <div id="hidden-list" class="hidden-list" hidden></div>
+          </span>
+        </div>
+        <div id="legend-body" class="legend-body"></div>
       </div>
     </section>
   </main>
@@ -253,15 +263,19 @@
   <script src="js/meta-cards.js"></script>
   <script src="js/graph.js"></script>
   <script src="js/inspector.js"></script>
+  <script src="js/legend.js"></script>
   <script src="js/style-ui.js"></script>
   <script src="js/anomalies.js"></script>
   <script src="js/help.js"></script>
   <script src="js/forms.js"></script>
   <script src="js/trash.js"></script>
   <script src="js/tools.js"></script>
+  <script src="js/clipboard.js"></script>
   <script src="js/settings-ui.js"></script>
   <script src="js/project-sync.js"></script>
   <script src="js/project.js"></script>
+  <script src="js/layouts.js"></script>
+  <script src="js/tabs.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

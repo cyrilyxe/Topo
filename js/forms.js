@@ -56,6 +56,20 @@ const Forms = {
           this.closeActive(opts.collect ? opts.collect(form) : {});
         }
       });
+      form.addEventListener("click", (event) => {
+        const clear = event.target.closest("button[data-act=clear]");
+        const input = clear && clear.parentElement.querySelector("input");
+
+        if (input) {
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.focus();
+
+          if (typeof input.showPicker === "function") {
+            try { input.showPicker(); } catch (error) { /* no picker without a user gesture */ }
+          }
+        }
+      });
       modal.querySelector("[data-act=cancel]").addEventListener("click", () => this.closeActive(null));
       modal.querySelector(".modal-backdrop").addEventListener("mousedown", () => this.closeActive(null));
       modal.addEventListener("keydown", (event) => {
@@ -126,12 +140,17 @@ const Forms = {
   // ---- helpers ----
 
   slug(text) {
-    return String(text || "")
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+    return DocEdit.slugify(text);
+  },
+
+  // Id proposed by the "ids.scheme" setting for a brick that is being created.
+  proposeId(label, type, parentLocal, taken) {
+    return DocEdit.autoId(Settings.get("ids.scheme") || "slug", { label, type, parent: parentLocal }, taken);
+  },
+
+  // A suggestion field: the control plus a ✕ button that empties it to show every option again.
+  combo(control) {
+    return `<span class="forms-combo">${control}<button type="button" class="forms-clear" data-act="clear" tabindex="-1" title="Vider le champ pour revoir toutes les suggestions" aria-label="Vider le champ">✕</button></span>`;
   },
 
   takenIds(model, exceptId) {
@@ -161,10 +180,20 @@ const Forms = {
     return `<label class="forms-field"><span>${escapeHtml(label)}</span>${control}${hint ? `<small>${escapeHtml(hint)}</small>` : ""}</label>`;
   },
 
-  nodeOptions(model, selected) {
+  nodeOptions(model) {
     return (model ? model.nodes : []).map((node) => (
-      `<option value="${escapeHtml(node.id)}"${node.id === selected ? " selected" : ""}>${escapeHtml(Model.pathLabel(node.id, model))}</option>`
+      `<option value="${escapeHtml(node.id)}" label="${escapeHtml(Model.pathLabel(node.id, model))}"></option>`
     )).join("");
+  },
+
+  // Brick id typed in a link field (id, qualified id or displayed path), or null.
+  resolveNodeText(model, text) {
+    const value = String(text || "").trim();
+    const nodes = model ? model.nodes : [];
+    const hit = nodes.find((node) => node.id === value) || nodes.find((node) => node.qualifiedId === value) ||
+      nodes.find((node) => Model.pathLabel(node.id, model) === value);
+
+    return hit ? hit.id : null;
   },
 
   metaRow(key, value) {
@@ -196,15 +225,17 @@ const Forms = {
     const parentId = node ? node.parent : options.parentId || null;
     const taken = this.takenIds(model, node ? node.id : null);
     const types = Array.from(new Set([...this.BASE_TYPES, ...(model ? model.nodes.map((n) => n.type) : [])]));
+    const roles = Array.from(new Set((model ? model.nodes : []).map((n) => n.role).filter(Boolean)));
+    const parentLocal = parentId && model && model.byId.has(parentId) ? model.byId.get(parentId).localId : null;
     const metaRows = Object.entries(this.scalarMeta(node)).map(([key, value]) => this.metaRow(key, value)).join("");
     const parentText = parentId && model && model.byId.has(parentId) ? Model.pathLabel(parentId, model) : "(racine)";
     const state = { idTouched: Boolean(node) };
 
     const body = `
       ${this.field("Libellé", `<input type="text" name="label" required data-autofocus value="${escapeHtml(node ? node.label : "")}" />`)}
-      ${this.field("Identifiant", `<input type="text" name="id" ${node ? "readonly" : ""} value="${escapeHtml(node ? node.localId : "")}" autocomplete="off" />`, node ? "Non modifiable." : "Proposé depuis le libellé ; lettres, chiffres, - et _.")}
-      ${this.field("Type", `<input type="text" name="type" list="forms-types" value="${escapeHtml(node ? node.type : "service")}" /><datalist id="forms-types">${types.map((t) => `<option value="${escapeHtml(t)}"></option>`).join("")}</datalist>`)}
-      ${this.field("Rôle", `<input type="text" name="role" value="${escapeHtml(node && node.role ? node.role : "")}" />`)}
+      ${this.field("Identifiant", `<input type="text" name="id" value="${escapeHtml(node ? node.localId : "")}" autocomplete="off" />`, node ? "Renommer met à jour toutes les références (liens, style, vue)." : "Proposé selon le réglage « ids.scheme » ; lettres, chiffres, - et _.")}
+      ${this.field("Type", this.combo(`<input type="text" name="type" list="forms-types" value="${escapeHtml(node ? node.type : "service")}" autocomplete="off" /><datalist id="forms-types">${types.map((t) => `<option value="${escapeHtml(t)}"></option>`).join("")}</datalist>`))}
+      ${this.field("Rôle", this.combo(`<input type="text" name="role" list="forms-roles" value="${escapeHtml(node && node.role ? node.role : "")}" autocomplete="off" /><datalist id="forms-roles">${roles.map((r) => `<option value="${escapeHtml(r)}"></option>`).join("")}</datalist>`))}
       ${this.field("Parent", `<input type="text" readonly tabindex="-1" value="${escapeHtml(parentText)}" />`)}
       <fieldset class="forms-meta"><legend>Métadonnées</legend>
         <div data-rows>${metaRows}</div>
@@ -215,27 +246,31 @@ const Forms = {
       title: node ? `Modifier « ${node.label} »` : "Nouvelle brique",
       body,
       okLabel: node ? "Enregistrer" : "Créer",
-      setup: (form) => this.setupBrick(form, taken, state, Boolean(node)),
+      setup: (form) => this.setupBrick(form, taken, state, Boolean(node), parentLocal),
       validate: (form) => this.validateBrick(form, taken),
       collect: (form) => this.collectBrick(form)
     });
   },
 
-  setupBrick(form, taken, state, editing) {
+  setupBrick(form, taken, state, editing, parentLocal) {
     const label = form.elements.label;
     const id = form.elements.id;
+    const type = form.elements.type;
     const rows = form.querySelector("[data-rows]");
 
     if (!editing) {
-      label.addEventListener("input", () => {
+      const propose = () => {
         if (!state.idTouched) {
-          id.value = this.uniqueSlug(this.slug(label.value), taken);
+          id.value = this.proposeId(label.value, type.value.trim(), parentLocal, taken);
         }
-      });
+      };
+
+      label.addEventListener("input", propose);
+      type.addEventListener("input", propose);
       id.addEventListener("input", () => {
         state.idTouched = true;
       });
-      id.value = this.uniqueSlug("", taken);
+      propose();
     }
 
     form.addEventListener("click", (event) => {
@@ -261,10 +296,6 @@ const Forms = {
 
     if (!form.elements.label.value.trim()) {
       return "Le libellé est obligatoire.";
-    }
-
-    if (id.readOnly) {
-      return "";
     }
 
     if (!/^[A-Za-z0-9_-]+$/.test(value)) {
@@ -300,16 +331,30 @@ const Forms = {
   link(options = {}) {
     const model = App.getModel();
     const body = `
-      ${this.field("De", `<select name="from">${this.nodeOptions(model, options.from)}</select>`)}
-      ${this.field("Vers", `<select name="to">${this.nodeOptions(model, options.to)}</select>`)}
+      ${this.field("De", this.combo(`<input type="text" name="from" list="forms-nodes" value="${escapeHtml(options.from || "")}" autocomplete="off" />`))}
+      ${this.field("Vers", this.combo(`<input type="text" name="to" list="forms-nodes" value="${escapeHtml(options.to || "")}" autocomplete="off" />`))}
+      <datalist id="forms-nodes">${this.nodeOptions(model)}</datalist>
       ${this.field("Libellé", `<input type="text" name="label" data-autofocus value="${escapeHtml(options.label || "")}" />`)}`;
 
     return this.dialog({
       title: options.editing ? "Modifier le lien" : "Nouveau lien",
       body,
       okLabel: options.editing ? "Enregistrer" : "Créer",
-      validate: (form) => (form.elements.from.value === form.elements.to.value ? "Un lien vers soi-même est refusé." : ""),
-      collect: (form) => ({ from: form.elements.from.value, to: form.elements.to.value, label: form.elements.label.value.trim() })
+      validate: (form) => {
+        const from = this.resolveNodeText(model, form.elements.from.value);
+        const to = this.resolveNodeText(model, form.elements.to.value);
+
+        if (!from || !to) {
+          return "Choisissez les deux briques dans les suggestions.";
+        }
+
+        return from === to ? "Un lien vers soi-même est refusé." : "";
+      },
+      collect: (form) => ({
+        from: this.resolveNodeText(model, form.elements.from.value),
+        to: this.resolveNodeText(model, form.elements.to.value),
+        label: form.elements.label.value.trim()
+      })
     });
   },
 

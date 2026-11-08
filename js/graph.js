@@ -342,6 +342,7 @@ const Graph = {
           "z-index": 0,
           "line-color": t("--edge", "#8b98ad"),
           "target-arrow-color": t("--edge", "#8b98ad"),
+          "source-arrow-color": t("--edge", "#8b98ad"),
           label: "data(label)",
           "font-size": 9,
           color: t("--edge-text", "#475569"),
@@ -363,7 +364,23 @@ const Graph = {
       },
       { selector: "node[ruleColor]", style: { "background-color": "data(ruleColor)" } },
       { selector: "node[ruleBorder]", style: { "border-color": "data(ruleBorder)" } },
+      { selector: "node.collapsed[ruleColor]", style: { "background-opacity": 1 } },
       { selector: "node[ruleOpacity >= 0]", style: { opacity: "data(ruleOpacity)" } },
+      { selector: "node[ruleBorderStyle]", style: { "border-style": "data(ruleBorderStyle)" } },
+      { selector: "node[ruleShape]", style: { shape: "data(ruleShape)" } },
+      { selector: "node[ruleBorderWidth >= 0]", style: { "border-width": "data(ruleBorderWidth)" } },
+      { selector: "node[autoText]", style: { color: "data(autoText)" } },
+      { selector: "node[ruleText]", style: { color: "data(ruleText)" } },
+      { selector: "node[?ruleBold]", style: { "font-weight": "bold" } },
+      { selector: "node[?ruleItalic]", style: { "font-style": "italic" } },
+      { selector: "node[ruleTextBg]", style: { "text-background-color": "data(ruleTextBg)", "text-background-opacity": 1, "text-background-padding": 3, "text-background-shape": "round-rectangle" } },
+      { selector: "edge[autoText]", style: { color: "data(autoText)" } },
+      { selector: "edge[lsText]", style: { color: "data(lsText)" } },
+      { selector: "edge[lsColor]", style: { "line-color": "data(lsColor)", "target-arrow-color": "data(lsColor)", "source-arrow-color": "data(lsColor)" } },
+      { selector: "edge[lsWidth > 0]", style: { width: "data(lsWidth)" } },
+      { selector: "edge[lsLine]", style: { "line-style": "data(lsLine)" } },
+      { selector: "edge[lsArrow]", style: { "target-arrow-shape": "data(lsArrow)" } },
+      { selector: "edge[lsSource]", style: { "source-arrow-shape": "data(lsSource)" } },
       { selector: "node.dim, node.focus-dim", style: { opacity: 0.18 } },
       { selector: "edge.dim, edge.focus-dim", style: { opacity: 0.08 * edgeOpacity } },
       {
@@ -903,12 +920,109 @@ const Graph = {
     }
   },
 
+  // Colour parsed to { r, g, b, a }; named / hsl colours are resolved through a canvas.
+  resolveColor(value) {
+    const parsed = Style.parseColor(value);
+
+    if (parsed || !value) {
+      return parsed;
+    }
+
+    try {
+      this.colorContext = this.colorContext || document.createElement("canvas").getContext("2d");
+      this.colorContext.fillStyle = "#000000";
+      this.colorContext.fillStyle = String(value);
+
+      return Style.parseColor(this.colorContext.fillStyle);
+    } catch (error) {
+      return null;
+    }
+  },
+
+  // Effective background of a node (own fill composed over its parent / the canvas) and the theme text it would use.
+  nodeBackground(node, memo, tok) {
+    if (memo.has(node.id())) {
+      return memo.get(node.id());
+    }
+
+    const rule = node.data("rule") || {};
+    const parent = node.parent();
+    const base = parent.nonempty() ? this.nodeBackground(parent, memo, tok).bg : this.resolveColor(tok("--canvas", "#ffffff"));
+    const collapsed = node.hasClass("collapsed");
+    const group = !collapsed && node.isParent();
+    let fill;
+    let text;
+
+    if (collapsed) {
+      fill = this.resolveColor(tok("--collapsed-fill", "rgba(124,58,237,0.16)"));
+      text = tok("--collapsed-text", "#3b0764");
+    } else if (group) {
+      fill = this.resolveColor(tok(`--group-${Math.min(Number(node.data("depth")) || 0, 3)}-fill`, "rgba(37,99,235,0.06)"));
+      text = tok("--group-text", "#1e3a8a");
+    } else {
+      fill = this.resolveColor(tok(`--node-${node.data("typeKey") || "default"}`, "#0369a1"));
+      text = tok("--node-text", "#ffffff");
+    }
+
+    const own = rule.color ? this.resolveColor(rule.color) : null;
+    const source = own ? { r: own.r, g: own.g, b: own.b, a: collapsed ? 1 : (fill ? fill.a : 1) } : fill;
+    const bg = source && base ? Style.compose(source, base) : base;
+    const result = { bg, text };
+
+    memo.set(node.id(), result);
+
+    return result;
+  },
+
+  // Auto contrast text colour of every node and edge label (recomputed on theme / rule change).
+  applyTextContrast(tok) {
+    const memo = new Map();
+    const canvas = this.resolveColor(tok("--canvas", "#ffffff"));
+
+    this.cy.nodes().not(".meta-card").forEach((node) => {
+      const rule = node.data("rule") || {};
+      const info = this.nodeBackground(node, memo, tok);
+      const own = rule.textBackground ? this.resolveColor(rule.textBackground) : null;
+      const behind = own ? Style.compose(own, info.bg || canvas) : info.bg;
+
+      this.setData(node, "autoText", behind ? Style.autoText(behind, info.text) : undefined);
+    });
+
+    const labelBg = this.resolveColor(tok("--edge-label-bg", "#ffffff"));
+    const labelBehind = labelBg && canvas ? Style.compose(labelBg, canvas, 0.92) : canvas;
+
+    this.cy.edges().forEach((edge) => {
+      const preferred = edge.hasClass("meta") ? tok("--meta-edge-text", "#92400e") : tok("--edge-text", "#475569");
+
+      this.setData(edge, "autoText", labelBehind ? Style.autoText(labelBehind, preferred) : undefined);
+    });
+  },
+
   // Colour, border and opacity go through data mappers so that state classes keep priority.
   applyStyle() {
     const scale = Style.scale();
+    const cache = new Map();
+    const tok = (name, fallback) => {
+      if (!cache.has(name)) {
+        cache.set(name, this.token(name, fallback));
+      }
+
+      return cache.get(name);
+    };
 
     this.cy.batch(() => {
       this.cy.edges().removeClass("hl-edge");
+
+      this.cy.edges().forEach((edge) => {
+        const link = edge.data("linkStyle") || {};
+
+        this.setData(edge, "lsColor", link.color);
+        this.setData(edge, "lsWidth", link.width);
+        this.setData(edge, "lsLine", link.line);
+        this.setData(edge, "lsArrow", link.arrow);
+        this.setData(edge, "lsSource", link.sourceArrow);
+        this.setData(edge, "lsText", link.textColor);
+      });
 
       this.cy.nodes().not(".meta-card").forEach((node) => {
         const rule = node.data("rule") || {};
@@ -920,6 +1034,14 @@ const Graph = {
         this.setData(node, "ruleColor", rule.color);
         this.setData(node, "ruleBorder", rule.border);
         this.setData(node, "ruleOpacity", rule.opacity);
+        this.setData(node, "ruleBorderStyle", rule.borderStyle);
+        // Expanded compounds are always drawn as rectangles by Cytoscape: the shape only applies to leaves and collapsed groups.
+        this.setData(node, "ruleShape", isGroup ? undefined : rule.shape);
+        this.setData(node, "ruleBorderWidth", rule.borderWidth);
+        this.setData(node, "ruleText", rule.textColor);
+        this.setData(node, "ruleBold", rule.bold ? true : undefined);
+        this.setData(node, "ruleItalic", rule.italic ? true : undefined);
+        this.setData(node, "ruleTextBg", rule.textBackground);
 
         if (isGroup) {
           styles.padding = `${32 * size}px`;
@@ -940,6 +1062,8 @@ const Graph = {
           node.connectedEdges().addClass("hl-edge");
         }
       });
+
+      this.applyTextContrast(tok);
     });
   },
 
@@ -1121,15 +1245,7 @@ const Graph = {
       throw new Error(criteria.error);
     }
 
-    const matches = model.nodes.filter((node) => {
-      const target = [node.id, node.qualifiedId, node.label, node.type || "", JSON.stringify(node.meta || {})].join("\n");
-
-      if (criteria.regex) {
-        return criteria.regex.test(target);
-      }
-
-      return target.toLowerCase().includes(criteria.text.toLowerCase());
-    });
+    const matches = model.nodes.filter((node) => Style.matchSearch(criteria, node));
 
     const ids = new Set(matches.map((node) => node.id));
 
@@ -1150,31 +1266,8 @@ const Graph = {
     return matches;
   },
 
+  // Text / regex plus type:x role:y filters (see Style.parseSearch).
   parseSearch(text) {
-    const value = String(text || "").trim();
-
-    if (!value) {
-      return null;
-    }
-
-    const delimited = value.match(/^\/(.*)\/([gimsuy]*)$/s);
-
-    if (delimited) {
-      try {
-        return { regex: new RegExp(delimited[1], delimited[2].replace(/g|y/g, "")) };
-      } catch (error) {
-        return { error: `Expression régulière invalide : ${error.message}` };
-      }
-    }
-
-    if (/[\\^$.*+?()[\]{}|]/.test(value)) {
-      try {
-        return { regex: new RegExp(value, "i") };
-      } catch {
-        return { text: value };
-      }
-    }
-
-    return { text: value };
+    return Style.parseSearch(text);
   }
 };

@@ -359,13 +359,14 @@ style:
         anomalies.push({ level: "warning", code: "self-link", message: `Le lien n°${i + 1} relie « ${from} » à lui-même : ignoré.`, path: `links[${i}]`, line });
         return;
       }
-      links.push({ from: rf.id, to: rt.id, label: l.label ? String(l.label) : "", meta: isObj(l.meta) ? l.meta : {}, line });
+      links.push({ from: rf.id, to: rt.id, label: l.label ? String(l.label) : "", meta: isObj(l.meta) ? l.meta : {}, style: isObj(l.style) ? l.style : {}, line });
     });
     return links;
   }
 
   function buildStyle(style, model, anomalies) {
     const out = { size: style && style.size !== undefined ? style.size : 1, rules: [] };
+    ["presets", "roles", "types"].forEach((k) => { if (style && style[k] !== undefined) out[k] = style[k]; });
     ((style && style.rules) || []).forEach((rule) => {
       const res = resolveRef(rule.target, model);
       if (res.error) {

@@ -19,8 +19,10 @@
     return { key, type: "number", default: def, min, max, step, label, help };
   }
 
-  const SPEC = [
+  const SPEC_ALL = [
     bool("delete.relinkToParent", false, "Suppression : rattacher les liens au parent", "Case par défaut de la confirmation de suppression : les liens des briques supprimées sont rattachés à leur parent."),
+    choice("ids.scheme", "slug", ["slug", "parent-slug", "type-n"], "Identifiants automatiques", "slug : depuis le libellé ; parent-slug : <id du parent>-<libellé> ; type-n : <type>-<n> incrémental."),
+    bool("ids.followMove", false, "Identifiants : suivre le déplacement et le libellé", "Si l’id d’une brique est encore automatique (celui que le schéma produirait), il est régénéré quand on la déplace ou qu’on change son libellé ; les références suivent."),
     bool("drop.repulsion", true, "Répulsion au relâchement", "Au relâchement, la boîte déplacée se pose sans chevaucher ses frères."),
     choice("selection.tab", "keep", ["keep", "inspector", "style"], "Onglet à la sélection", "keep : ne pas changer d’onglet ; inspector : Inspecteur ; style : Style."),
     choice("editor.foldSync", "graph-to-editor", ["graph-to-editor", "both", "off"], "Pliage synchronisé éditeur / graphe", "graph-to-editor : replier un groupe dans le graphe plie son bloc children: dans l’éditeur ; both : et inversement ; off : aucune synchronisation."),
@@ -33,10 +35,12 @@
     choice("meta.card.when", "never", ["leaf", "expanded", "always", "never"], "Fiche métadonnée : quand", "leaf : brique sans enfant visible ; expanded : groupe déplié ; always ; never."),
     choice("meta.card.position", "top-right", ["top-left", "top-right", "bottom-left", "bottom-right", "free"], "Fiche métadonnée : position", "Coin d’ancrage, ou free (déplaçable)."),
     num("meta.card.maxChars", 50, 10, 200, 1, "Fiche métadonnée : caractères par ligne", "Au-delà, le texte est tronqué."),
-    num("meta.card.maxLines", 3, 1, 20, 1, "Fiche métadonnée : lignes", "Au-delà, la fiche est tronquée.")
+    num("meta.card.maxLines", 3, 1, 20, 1, "Fiche métadonnée : lignes", "Au-delà, la fiche est tronquée."),
+    { key: "style.presets", type: "object", hidden: true, default: { nodes: {}, links: {} }, label: "Styles nommés", help: "Styles de brique et de lien enregistrés (géré par l’onglet Style)." }
   ];
+  const SPEC = SPEC_ALL.filter((s) => !s.hidden);
 
-  const BY_KEY = new Map(SPEC.map((s) => [s.key, s]));
+  const BY_KEY = new Map(SPEC_ALL.map((s) => [s.key, s]));
   const SOURCES = ["default", "suggested", "local", "document"];
   const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -46,6 +50,12 @@
     if (!spec) return undefined;
     if (spec.type === "boolean") return typeof value === "boolean" ? value : undefined;
     if (spec.type === "enum") return spec.options.includes(value) ? value : undefined;
+    if (spec.type === "object") {
+      if (!isPlain(value)) return undefined;
+      const out = {};
+      ["nodes", "links"].forEach((k) => { out[k] = isPlain(value[k]) ? value[k] : {}; });
+      return out;
+    }
     const n = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
     if (typeof n !== "number" || !Number.isFinite(n)) return undefined;
     return Math.min(spec.max, Math.max(spec.min, n));
@@ -67,7 +77,7 @@
 
   function defaults() {
     const out = {};
-    SPEC.forEach((s) => { out[s.key] = s.default; });
+    SPEC_ALL.forEach((s) => { out[s.key] = s.default; });
     return out;
   }
 
@@ -75,7 +85,7 @@
   function resolve(levels) {
     const values = defaults();
     const sources = {};
-    SPEC.forEach((s) => { sources[s.key] = "default"; });
+    SPEC_ALL.forEach((s) => { sources[s.key] = "default"; });
     ["suggested", "local", "document"].forEach((level) => {
       Object.keys(levels[level] || {}).forEach((key) => {
         const v = coerce(key, levels[level][key]);
@@ -162,7 +172,7 @@
       const before = current;
       mutate();
       current = resolve(levels);
-      const changed = SPEC.map((s) => s.key).filter((k) => before.values[k] !== current.values[k] || before.sources[k] !== current.sources[k]);
+      const changed = SPEC_ALL.map((s) => s.key).filter((k) => JSON.stringify(before.values[k]) !== JSON.stringify(current.values[k]) || before.sources[k] !== current.sources[k]);
       if (changed.length) listeners.slice().forEach((fn) => fn(changed, self));
     }
 
@@ -179,7 +189,7 @@
       SPEC,
       get: (key) => current.values[key],
       source: (key) => current.sources[key],
-      all: () => ({ ...current.values }),
+      all: () => Object.fromEntries(Object.entries(current.values).filter(([k]) => !BY_KEY.get(k).hidden)),
       sources: () => ({ ...current.sources }),
       onChange: (fn) => { listeners.push(fn); },
       spec: (key) => BY_KEY.get(key),

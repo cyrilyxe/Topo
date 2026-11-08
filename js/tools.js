@@ -659,7 +659,9 @@ const Tools = {
       App.collapsed.delete(target.id);
     }
 
-    if (App.edit(`Déplacement de « ${node.label} » ${where}`, (text) => DocEdit.moveNode(text, drag.id, target ? target.id : null))) {
+    const moved = (text) => this.followIds(text, DocEdit.moveNode(text, drag.id, target ? target.id : null), drag.id);
+
+    if (App.edit(`Déplacement de « ${node.label} » ${where}`, moved)) {
       App.showMessage(`« ${node.label} » déplacé ${where}.`, "success");
       return;
     }
@@ -694,12 +696,43 @@ const Tools = {
     }
 
     App.collapsed.delete(parentId);
+    const fresh = this.newStyleKinds(values);
 
     if (App.edit(`Ajout de « ${values.label} »`, (text) => DocEdit.addNode(text, parentId, obj))) {
+      this.placeBricks([values.id]);
       this.selectIds([values.id]);
+      this.offerStyleEditor(fresh, values.id);
     } else if (wasCollapsed) {
       App.collapsed.add(parentId);
     }
+  },
+
+  // A role/type never seen before (no brick, no style entry, not built-in) gets its style editor opened.
+  newStyleKinds(values) {
+    const model = App.getModel();
+    const builtIn = ["service", "database", "application", "external", "queue", "group"];
+    const fresh = [];
+
+    [["role", "roles"], ["type", "types"]].forEach(([kind, key]) => {
+      const value = values[kind];
+      const known = model && (model.nodes.some((n) => n[kind] === value) || (model.style && model.style[key] && model.style[key][value]));
+
+      if (value && !known && !(kind === "type" && builtIn.includes(String(value).toLowerCase()))) {
+        fresh.push({ kind, value });
+      }
+    });
+
+    return fresh;
+  },
+
+  offerStyleEditor(fresh, id) {
+    if (!fresh.length || typeof Legend === "undefined" || typeof Legend.openStyleEditor !== "function") {
+      return;
+    }
+
+    const anchor = document.querySelector(".legend, #legend") || document.getElementById("cy");
+    setTimeout(() => Legend.openStyleEditor(fresh[0].kind, fresh[0].value, anchor), 50);
+    App.showMessage(`Nouveau ${fresh[0].kind === "role" ? "rôle" : "type"} « ${fresh[0].value} » : définissez son style (il s'appliquera aux suivants).`, "info");
   },
 
   nodePatch(node, values) {
@@ -747,10 +780,193 @@ const Tools = {
     }
 
     const patch = this.nodePatch(node, values);
+    const newId = values.id && values.id !== node.localId ? values.id : null;
 
-    if (Object.keys(patch).length) {
-      App.edit(`Modification de « ${node.label} »`, (text) => DocEdit.updateNode(text, id, patch));
+    if (!Object.keys(patch).length && !newId) {
+      return;
     }
+
+    App.edit(`Modification de « ${node.label} »`, (text) => {
+      let next = Object.keys(patch).length ? DocEdit.updateNode(text, id, patch) : text;
+
+      if (newId) {
+        next = DocEdit.renameId(next, id, newId);
+      } else if (patch.label || patch.type) {
+        next = this.followIds(text, next, id);
+      }
+
+      return next;
+    });
+  },
+
+  // ---- placement of new bricks ----
+
+  PLACE_GAP: 24,
+  PLACE_COLS: 4,
+
+  // Pure. First free spot for `box` among its siblings: right of the row of the last sibling, else a new row below.
+  // Returns the { dx, dy } to apply to `box`; `others` are the boxes it must not overlap.
+  slotFor(box, siblings, others, gap = this.PLACE_GAP, cols = this.PLACE_COLS) {
+    const w = box.x2 - box.x1;
+    const h = box.y2 - box.y1;
+    const fit = (x1, y1) => {
+      const wanted = { x1, y1, x2: x1 + w, y2: y1 + h };
+      const shift = Repulsion.findFreeShift(wanted, others, gap);
+      const moved = { x1: wanted.x1 + shift.dx, y1: wanted.y1 + shift.dy, x2: wanted.x2 + shift.dx, y2: wanted.y2 + shift.dy };
+
+      return others.some((other) => Repulsion.overlaps(moved, other)) ? null : { dx: moved.x1 - box.x1, dy: moved.y1 - box.y1 };
+    };
+
+    if (!siblings.length) {
+      return fit(box.x1, box.y1) || { dx: 0, dy: 0 };
+    }
+
+    const last = siblings[siblings.length - 1];
+    const row = siblings.filter((item) => Math.min(item.y2, last.y2) - Math.max(item.y1, last.y1) > Math.min(item.y2 - item.y1, last.y2 - last.y1) / 2);
+    const left = Math.min(...siblings.map((item) => item.x1));
+    const below = Math.max(...siblings.map((item) => item.y2)) + gap;
+    const tries = [];
+
+    if (row.length < cols) {
+      tries.push(() => fit(Math.max(...row.map((item) => item.x2)) + gap, (last.y1 + last.y2) / 2 - h / 2));
+    }
+
+    tries.push(() => fit(left, below));
+
+    for (const attempt of tries) {
+      const slot = attempt();
+
+      if (slot) {
+        return slot;
+      }
+    }
+
+    const bottom = Math.max(below, ...others.map((item) => item.y2 + gap));
+
+    return { dx: left - box.x1, dy: bottom - box.y1 };
+  },
+
+  // Moves each newly created brick (and its subtree) to a free slot in its parent, then keeps it as a manual position.
+  placeBricks(ids) {
+    const cy = this.cy;
+
+    if (!cy || App.layout === "tree") {
+      return false;
+    }
+
+    const roots = ids.map((id) => cy.getElementById(id)).filter((node) => node.nonempty());
+    const waiting = new Set();
+
+    roots.forEach((node) => {
+      waiting.add(node.id());
+      node.descendants().forEach((child) => waiting.add(child.id()));
+    });
+
+    let moved = false;
+
+    roots.forEach((node) => {
+      waiting.delete(node.id());
+      node.descendants().forEach((child) => waiting.delete(child.id()));
+
+      const parent = node.parent().nonempty() ? node.parent() : null;
+
+      if (node.isParent()) {
+        this.arrangeSubtree(node);
+      }
+
+      const lineage = new Set([node.id(), ...node.descendants().map((item) => item.id()), ...node.ancestors().map((item) => item.id())]);
+      const real = cy.nodes().filter((item) => !item.hasClass("meta-card") && !waiting.has(item.id()));
+      const siblings = real.filter((item) => item.id() !== node.id() && (parent ? item.parent().id() === parent.id() : item.parent().empty()));
+      const others = real.filter((item) => !lineage.has(item.id()));
+      const delta = this.slotFor(
+        Repulsion.boxOf(node),
+        siblings.map((item) => Repulsion.boxOf(item)),
+        others.map((item) => Repulsion.boxOf(item))
+      );
+
+      this.shiftLeaves(node, delta);
+
+      const clear = Repulsion.resolve(Repulsion.snapshot(cy), node.id(), { margin: Repulsion.MARGIN });
+
+      if (clear.ok) {
+        this.shiftLeaves(node, clear);
+      }
+
+      moved = true;
+    });
+
+    if (moved) {
+      Graph.pinned = true;
+      App.schedulePersistView();
+    }
+
+    return moved;
+  },
+
+  // A pasted group arrives with its leaves stacked around one point: lay its children out in rows, recursively.
+  arrangeSubtree(root) {
+    const gap = this.PLACE_GAP;
+    const cols = this.PLACE_COLS;
+
+    const measure = (node) => {
+      const kids = node.children().not(".meta-card");
+
+      if (kids.empty()) {
+        const box = Repulsion.boxOf(node);
+
+        return { node, w: box.x2 - box.x1, h: box.y2 - box.y1, kids: [] };
+      }
+
+      const blocks = kids.map(measure);
+      let x = 0;
+      let y = 0;
+      let rowH = 0;
+      let width = 0;
+
+      blocks.forEach((block, index) => {
+        if (index && index % cols === 0) {
+          y += rowH + gap;
+          x = 0;
+          rowH = 0;
+        }
+
+        block.x = x;
+        block.y = y;
+        x += block.w + gap;
+        rowH = Math.max(rowH, block.h);
+        width = Math.max(width, x - gap);
+      });
+
+      const pad = (node.numericStyle("padding") || 0) + 32;
+
+      return { node, w: width + pad * 2, h: y + rowH + pad * 2, kids: blocks, pad };
+    };
+
+    const place = (block, left, top) => {
+      if (!block.kids.length) {
+        block.node.position({ x: left + block.w / 2, y: top + block.h / 2 });
+        return;
+      }
+
+      block.kids.forEach((kid) => place(kid, left + block.pad + kid.x, top + block.pad + kid.y));
+    };
+    const origin = Repulsion.boxOf(root);
+
+    place(measure(root), origin.x1, origin.y1);
+  },
+
+  shiftLeaves(node, delta) {
+    if (!delta.dx && !delta.dy) {
+      return;
+    }
+
+    Repulsion.leavesOf(node).forEach((leaf) => leaf.position({ x: leaf.position("x") + delta.dx, y: leaf.position("y") + delta.dy }));
+  },
+
+  // ---- ids that follow the label / the parent ----
+
+  followIds(before, after, id) {
+    return Settings.get("ids.followMove") ? DocEdit.followId(before, after, id, Settings.get("ids.scheme")) : after;
   },
 
   // ---- links ----
@@ -1047,6 +1263,20 @@ const Tools = {
 
   onModKey(event) {
     const code = event.code;
+    const clip = !event.shiftKey && !event.altKey && ["c", "x", "v"].includes(event.key.toLowerCase());
+
+    if (clip && typeof Clipboard !== "undefined") {
+      const key = event.key.toLowerCase();
+
+      if (key !== "v" && String(window.getSelection()).length) {
+        return;
+      }
+
+      event.preventDefault();
+      Clipboard[{ c: "copy", x: "cut", v: "paste" }[key]]();
+      return;
+    }
+
     const forward = event.key === "]" || event.key === "}" || code === "BracketRight";
     const backward = event.key === "[" || event.key === "{" || code === "BracketLeft";
 
