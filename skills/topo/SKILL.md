@@ -47,6 +47,7 @@ links:                      # relations orientées entre briques (n'importe quel
   - from: api
     to: base-donnees
     label: lectures / écritures
+    style: { color: "#2563eb", width: 2, line: dashed, arrow: vee }   # optionnel, voir §2 bis
 ```
 
 **Références** (`from`, `to`) : id local s'il est unique ; sinon chemin qualifié par des points
@@ -55,6 +56,42 @@ links:                      # relations orientées entre briques (n'importe quel
 **Blocs de présentation — à préserver tels quels, jamais à interpréter comme des exigences** :
 `style:` (couleurs, mise en avant, masquage), `view:` (replis, zoom, positions), `settings:` (réglages d'affichage).
 **`trash:`** = éléments que l'utilisateur a supprimés dans Topo (restaurables) : voir §5.
+
+## 2 bis. Présentation (facultatif — à n'écrire que si l'utilisateur le demande)
+
+Tu peux proposer un style cohérent à la création (une couleur par rôle ou par type), mais ensuite c'est l'utilisateur qui le gère dans Topo.
+
+```yaml
+style:
+  types:                    # style par défaut de tous les nœuds d'un type
+    service:  { color: "#dbeafe", border: "#2563eb", shape: round-rectangle }
+    database: { color: "#dcfce7", shape: barrel }
+  roles:                    # prioritaire sur types
+    domain:   { border: "#7c3aed", borderStyle: dashed, borderWidth: 2, bold: true }
+  rules:                    # ciblées sur un nœud (prioritaires sur roles et types)
+    - target: plateforme.donnees.cache
+      color: "#fef3c7"
+      highlight: true       # autres clés : opacity, size, hidden, label, textColor, italic, textBackground
+  presets: { … }            # styles nommés enregistrés par l'utilisateur
+view:
+  collapsed: [clients]      # groupes repliés
+  positions: { api: { x: 120, y: 80 } }
+  layouts:                  # dispositions nommées figées par l'utilisateur
+    revue: { positions: {…}, collapsed: […], zoom: 1, pan: {…}, layout: fcose, savedAt: "…" }
+settings:                   # réglages propres à ce fichier (prioritaires sur la config locale)
+  ids.scheme: slug          # slug | parent-slug | type-n
+```
+
+- Priorité des styles : défaut du type < `style.types` < `style.roles` < `style.rules`.
+- `shape` : round-rectangle, rectangle, ellipse, hexagon, diamond, barrel, rhomboid, tag, star… La forme est ignorée pour un groupe déplié.
+- La couleur du texte est contrastée automatiquement. Ne fixe `textColor` que pour un besoin précis.
+- `links[].style` accepte `color`, `width`, `line` (solid | dashed | dotted), `arrow` et `sourceArrow` (triangle | vee | triangle-backcurve | circle | square | diamond | tee | none), et `textColor`.
+- Conventions de lecture : une couleur ou une forme partagée par un type ou un rôle forme une **légende**. Un `highlight` ou un style de lien particulier signale souvent un point d'attention : mentionne-le, sans en faire une exigence.
+
+**Fonctions de l'appli qui touchent au YAML** (bon à savoir quand tu relis une carte modifiée) :
+- **Renommer un id dans Topo** réécrit toutes ses références : liens, `style.rules[].target`, `view`, `trash`. Un id changé de façon cohérente partout est donc un renommage voulu.
+- **Copier-coller** de briques entre cartes : le presse-papiers contient un YAML `topo-clipboard: { nodes, links }`. En cas de conflit, les ids collés sont régénérés selon `ids.scheme`, par exemple `api-2` ou `plateforme-api`.
+- Positions, replis et dispositions vivent dans `view`. Ce n'est jamais une consigne d'architecture.
 
 ## 3. Produire une carte depuis un code existant
 
@@ -105,7 +142,8 @@ Après avoir écrit des briques : lance `check` et corrige toutes les erreurs av
 Garde une copie de la version que tu as fournie (ou retrouve-la via git). Quand l'utilisateur te rend le nouveau YAML :
 
 1. **Calcule le diff sémantique** (pas textuel) : nœuds ajoutés / supprimés / renommés (label) / déplacés (parent changé) / meta modifiée ;
-   liens ajoutés / supprimés / relabellisés. Ignore `style`, `view`, `settings` et l'ordre des clés.
+   liens ajoutés / supprimés / relabellisés. Ignore `style`, `view`, `settings`, l'ordre des clés
+   et l'ordre des frères (Topo réordonne les nœuds pour gérer l'empilement visuel).
 2. **Présente le diff** à l'utilisateur en liste courte avant d'agir, regroupé par intention :
    « Nouveau service `notifications` dans Plateforme, appelé par `api` », « `cache` déplacé de Données vers Exécution »…
 3. **Interprète** :
@@ -123,6 +161,8 @@ Garde une copie de la version que tu as fournie (ou retrouve-la via git). Quand 
 ## 6. Pièges
 
 - Ne renomme pas les `id` existants sans raison : Topo y rattache style, vue et positions. Change le `label`.
+  Si tu dois renommer, mets à jour toutes les références, y compris `style.rules[].target`, `view.positions`, `view.collapsed`, `view.layouts.*` et `trash`.
+- Un nouveau `type` ou `role` est libre. Si `style.types` ou `style.roles` existe déjà, ajoute une entrée pour le nouveau, ou laisse l'utilisateur la créer depuis la légende.
 - Ids uniques globalement si possible ; sinon, références qualifiées obligatoires.
 - Pas de tabulations (indentation en espaces).
 - Ne supprime jamais les blocs `style:`, `view:`, `settings:`, `trash:` d'un fichier que l'utilisateur t'a rendu.
