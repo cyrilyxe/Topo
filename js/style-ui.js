@@ -951,6 +951,10 @@ const StyleUI = {
 
     this.mutate(label, (style, map) => this.patchRules(style, map, ids, props));
     this.render();
+
+    if ("size" in props) {
+      Repulsion.settle(ids);
+    }
   },
 
   setGlobalSize(size) {
@@ -958,6 +962,7 @@ const StyleUI = {
       style.size = size === 1 ? undefined : size;
     });
     this.render();
+    Repulsion.settle([]);
   },
 
   deleteRule(ids) {

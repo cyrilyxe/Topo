@@ -194,7 +194,11 @@ const Tools = {
         return;
       }
 
-      this.addBrick(event.target === cy ? null : event.target.id());
+      this.addBrick(event.target === cy ? null : event.target.id(), event.position && { x: event.position.x, y: event.position.y });
+    });
+
+    cy.on("cxttap", (event) => {
+      this.menuPoint = event.position ? { x: event.position.x, y: event.position.y } : null;
     });
 
     cy.on("mousedown", (event) => this.linkStart(event));
@@ -497,7 +501,6 @@ const Tools = {
     style
       .selector("node.floating").style({ opacity: 0.55, "z-index": 9999, "z-index-compare": "manual" })
       .selector("node.drop-target").style({
-        "border-width": 4,
         "border-color": token("--drop-target", "#16a34a"),
         "underlay-color": token("--drop-target", "#16a34a"),
         "underlay-opacity": 0.25,
@@ -579,6 +582,118 @@ const Tools = {
       cancelled: false
     };
     node.addClass("floating");
+    this.moveFreezeStart(node);
+  },
+
+  // ---- frozen ancestor borders while a brick is dragged ----
+
+  FREEZE_STYLES: ["min-width", "min-height", "min-width-bias-left", "min-width-bias-right", "min-height-bias-top", "min-height-bias-bottom"],
+
+  // The real brick is hidden (so that it does not stretch its parents) and a root silhouette follows it;
+  // every ancestor keeps its original box, except the host (deepest original box holding the silhouette's centre) and above, which stretch.
+  moveFreezeStart(node) {
+    const drag = this.moveDrag;
+
+    if (!drag || App.layout === "tree" || !this.cy) {
+      return;
+    }
+
+    const list = node.ancestors().toArray().sort((a, b) => b.ancestors().length - a.ancestors().length);
+    const box = Repulsion.boxOf(node, false);
+    const first = Repulsion.leavesOf(node)[0] || node;
+    const ghost = this.cy.add({
+      group: "nodes",
+      data: { id: "__ghost", label: String(node.data("display") || node.data("label") || "") },
+      position: { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 },
+      classes: "floating",
+      grabbable: false,
+      selectable: false
+    });
+
+    ghost.style({
+      width: node.width(),
+      height: node.height(),
+      padding: node.style("padding"),
+      shape: node.style("shape"),
+      "background-color": node.style("background-color"),
+      "border-width": node.style("border-width"),
+      "border-color": node.style("border-color"),
+      "font-size": node.style("font-size"),
+      color: node.style("color"),
+      "text-valign": "center",
+      events: "no"
+    });
+
+    drag.freeze = {
+      node,
+      ghost,
+      list,
+      leaf: first,
+      leafStart: { ...first.position() },
+      start: { ...ghost.position() },
+      origin: Object.fromEntries(list.map((item) => [item.id(), Repulsion.boxOf(item, false)]))
+    };
+    node.style("display", "none");
+    // Ancestors are frozen once, deepest first: no stretching while dragging (the drop target is shown by its aura).
+    list.forEach((item) => this.freezeBox(item, drag.freeze.origin[item.id()]));
+    this.moveFreezeUpdate();
+  },
+
+  freezeBox(item, want) {
+    const px = (value) => `${Math.max(0, value)}px`;
+
+    item.style({ "min-width": 0, "min-height": 0 });
+
+    const cur = Repulsion.boxOf(item, false);
+    const w = want.x2 - want.x1;
+    const h = want.y2 - want.y1;
+    const extraW = w - (cur.x2 - cur.x1);
+    const extraH = h - (cur.y2 - cur.y1);
+    const left = extraW > 0.5 ? Math.min(1, Math.max(0, (cur.x1 - want.x1) / extraW)) : 0.5;
+    const top = extraH > 0.5 ? Math.min(1, Math.max(0, (cur.y1 - want.y1) / extraH)) : 0.5;
+    const set = (mw, mh) => item.style({
+      "min-width": px(mw),
+      "min-height": px(mh),
+      "min-width-bias-left": `${left * 100}%`,
+      "min-width-bias-right": `${(1 - left) * 100}%`,
+      "min-height-bias-top": `${top * 100}%`,
+      "min-height-bias-bottom": `${(1 - top) * 100}%`
+    });
+
+    set(extraW > 0.5 ? w : 0, extraH > 0.5 ? h : 0);
+
+    const got = Repulsion.boxOf(item, false);
+    const fixW = extraW > 0.5 ? w + (w - (got.x2 - got.x1)) : 0;
+    const fixH = extraH > 0.5 ? h + (h - (got.y2 - got.y1)) : 0;
+
+    if (Math.abs(fixW - w) > 1 || Math.abs(fixH - h) > 1) {
+      set(fixW, fixH);
+    }
+  },
+
+  moveFreezeUpdate() {
+    const drag = this.moveDrag;
+    const fz = drag && drag.freeze;
+
+    if (!fz) {
+      return;
+    }
+
+    fz.ghost.position({ x: fz.start.x + fz.leaf.position("x") - fz.leafStart.x, y: fz.start.y + fz.leaf.position("y") - fz.leafStart.y });
+  },
+
+  moveFreezeEnd() {
+    const drag = this.moveDrag;
+    const fz = drag && drag.freeze;
+
+    if (!fz) {
+      return;
+    }
+
+    drag.freeze = null;
+    fz.ghost.remove();
+    fz.list.forEach((item) => item.removeStyle(this.FREEZE_STYLES.join(" ")));
+    fz.node.removeStyle("display");
   },
 
   moveTrack(event) {
@@ -603,6 +718,8 @@ const Tools = {
   moveKeep() {
     if (this.moveDrag && this.moveDrag.cancelled) {
       this.restorePositions(this.moveDrag);
+    } else {
+      this.moveFreezeUpdate();
     }
   },
 
@@ -622,6 +739,7 @@ const Tools = {
     }
 
     drag.cancelled = true;
+    this.moveFreezeEnd();
     this.restorePositions(drag);
     this.clearMoveClasses();
     App.showMessage("Déplacement annulé.", "info");
@@ -634,6 +752,9 @@ const Tools = {
       return;
     }
 
+    const ancestors = drag.freeze ? drag.freeze.list.map((item) => item.id()) : [];
+
+    this.moveFreezeEnd();
     this.moveDrag = null;
     this.clearMoveClasses();
 
@@ -642,6 +763,7 @@ const Tools = {
     }
 
     if (drag.target === drag.parent) {
+      Repulsion.settle([drag.id, ...ancestors]);
       return;
     }
 
@@ -663,6 +785,7 @@ const Tools = {
 
     if (App.edit(`Déplacement de « ${node.label} » ${where}`, moved)) {
       App.showMessage(`« ${node.label} » déplacé ${where}.`, "success");
+      Repulsion.settle([drag.id]);
       return;
     }
 
@@ -675,7 +798,7 @@ const Tools = {
 
   // ---- bricks ----
 
-  async addBrick(parentId) {
+  async addBrick(parentId, point = null) {
     const values = await Forms.brick({ parentId });
 
     if (!values) {
@@ -699,7 +822,13 @@ const Tools = {
     const fresh = this.newStyleKinds(values);
 
     if (App.edit(`Ajout de « ${values.label} »`, (text) => DocEdit.addNode(text, parentId, obj))) {
-      this.placeBricks([values.id]);
+      const atClick = point && (!parentId || Settings.get("create.placement") === "click");
+
+      if (!(atClick && this.placeAtPoint([values.id], point))) {
+        this.placeBricks([values.id]);
+      }
+
+      Repulsion.settle([values.id], { newIds: [values.id] });
       this.selectIds([values.id]);
       this.offerStyleEditor(fresh, values.id);
     } else if (wasCollapsed) {
@@ -901,6 +1030,38 @@ const Tools = {
     }
 
     return moved;
+  },
+
+  // Puts the top-left corner of the first brick (and its subtree) at a model point; the other ones take a free slot.
+  placeAtPoint(ids, point) {
+    const cy = this.cy;
+
+    if (!cy || App.layout === "tree" || !point) {
+      return false;
+    }
+
+    const node = cy.getElementById(ids[0]);
+
+    if (node.empty()) {
+      return false;
+    }
+
+    if (node.isParent()) {
+      this.arrangeSubtree(node);
+    }
+
+    const box = Repulsion.boxOf(node);
+
+    this.shiftLeaves(node, { dx: point.x - box.x1, dy: point.y - box.y1 });
+
+    if (ids.length > 1) {
+      this.placeBricks(ids.slice(1));
+    }
+
+    Graph.pinned = true;
+    App.schedulePersistView();
+
+    return true;
   },
 
   // A pasted group arrives with its leaves stacked around one point: lay its children out in rows, recursively.

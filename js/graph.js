@@ -562,13 +562,22 @@ const Graph = {
       return;
     }
 
-    if (this.setting("drop.repulsion", true) && typeof Repulsion !== "undefined") {
-      Repulsion.apply(node, (moved, ok) => {
+    // The move tool settles on its own after a release (and may have re-rendered the graph).
+    const moveTool = typeof Tools !== "undefined" && Tools.current === "move";
+
+    if (!moveTool && !node.removed() && this.setting("drop.repulsion", true) && typeof Repulsion !== "undefined") {
+      Repulsion.apply(node,(moved, ok) => {
         if (!ok && typeof App !== "undefined" && App.showMessage) {
           App.showMessage("Pas de place libre ici", "warning");
         }
 
         moved && this.callbacks.onViewChange?.("drag");
+
+        const parents = node.ancestors().map((item) => item.id());
+
+        if (parents.length) {
+          Repulsion.settle(parents);
+        }
       });
     }
   },

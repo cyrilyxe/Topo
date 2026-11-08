@@ -557,6 +557,10 @@ const App = {
     }
 
     this.render();
+
+    if (!this.collapsed.has(id)) {
+      Repulsion.settle([id]);
+    }
   },
 
   // First switch to the outline layout for a document: keep only level 1 expanded.
@@ -585,8 +589,11 @@ const App = {
 
   expandAll() {
     this.dropFocus();
+    const groups = [...this.collapsed];
+
     this.collapsed.clear();
     this.render();
+    Repulsion.settle(groups);
   },
 
   // ---- temporary focus on links (never persisted) ----
@@ -926,6 +933,10 @@ const App = {
     }
 
     this.render();
+
+    if (!folded) {
+      Repulsion.settle([node.id]);
+    }
   },
 
   viewInYaml(id) {
@@ -1077,7 +1088,7 @@ const App = {
       { label: "Copier", run: () => Clipboard.copy(this.menuTargets(id)) },
       { label: "Couper", run: () => Clipboard.cut(this.menuTargets(id)) },
       { label: `Coller dans « ${node.label || id} »`, run: () => Clipboard.paste(id) },
-      { label: "Ajouter un enfant…", run: () => Tools.addBrick(id) },
+      { label: "Ajouter un enfant…", run: () => Tools.addBrick(id, Tools.menuPoint) },
       { label: "Afficher la fiche", run: () => this.showCard(id) },
       { label: "Inspecter", run: () => this.inspectNode(id, { tab: "inspector" }) },
       {
@@ -1145,7 +1156,7 @@ const App = {
 
   backgroundMenu(position) {
     this.openMenu(position, "Diagramme", [
-      { label: "Nouvelle brique racine…", run: () => Tools.addBrick(null) },
+      { label: "Nouvelle brique racine…", run: () => Tools.addBrick(null, Tools.menuPoint) },
       { label: "Coller à la racine", run: () => Clipboard.paste(null) },
       { separator: true, label: "Zoom avant", run: () => Graph.zoomIn() },
       { label: "Zoom arrière", run: () => Graph.zoomOut() },
@@ -1549,6 +1560,7 @@ const App = {
       }
 
       applySize();
+      Repulsion.settle([]);
     });
 
     Settings.onChange((keys) => {

@@ -157,7 +157,10 @@
       return false;
     }
 
-    Tools.placeBricks(mapped.rootIds);
+    const point = destinationId !== undefined ? Tools.menuPoint : null;
+
+    if (!(point && Tools.placeAtPoint(mapped.rootIds, point))) Tools.placeBricks(mapped.rootIds);
+    Repulsion.settle(mapped.rootIds, { newIds: mapped.rootIds });
     Tools.selectIds(mapped.rootIds);
     App.showMessage(`${mapped.nodes.length} brique(s) collée(s) ${where}.`, "success");
     return true;
