@@ -579,10 +579,23 @@ const Tools = {
       origin: this.movePositions(node),
       boxes: this.moveBoxes(node.id()),
       target: App.getModel().byId.get(node.id()).parent || null,
-      cancelled: false
+      cancelled: false,
+      node,
+      started: false
     };
-    node.addClass("floating");
-    this.moveFreezeStart(node);
+  },
+
+  // The drag really starts on the first movement, so that clicks and double-clicks (expand/collapse) still reach the brick.
+  moveBegin() {
+    const drag = this.moveDrag;
+
+    if (!drag || drag.started) {
+      return;
+    }
+
+    drag.started = true;
+    drag.node.addClass("floating");
+    this.moveFreezeStart(drag.node);
   },
 
   // ---- frozen ancestor borders while a brick is dragged ----
@@ -699,7 +712,7 @@ const Tools = {
   moveTrack(event) {
     const drag = this.moveDrag;
 
-    if (!drag || drag.cancelled) {
+    if (!drag || !drag.started || drag.cancelled) {
       return;
     }
 
@@ -719,6 +732,7 @@ const Tools = {
     if (this.moveDrag && this.moveDrag.cancelled) {
       this.restorePositions(this.moveDrag);
     } else {
+      this.moveBegin();
       this.moveFreezeUpdate();
     }
   },
@@ -758,7 +772,7 @@ const Tools = {
     this.moveDrag = null;
     this.clearMoveClasses();
 
-    if (drag.cancelled || !App.getModel().byId.has(drag.id)) {
+    if (!drag.started || drag.cancelled || !App.getModel().byId.has(drag.id)) {
       return;
     }
 

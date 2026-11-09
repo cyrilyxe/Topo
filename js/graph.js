@@ -479,7 +479,7 @@ const Graph = {
     });
 
     cy.on("dbltap", "node", (event) => {
-      if (!event.target.hasClass("meta-card") && this.layoutName !== "tree" && this.selectToolActive()) {
+      if (!event.target.hasClass("meta-card") && this.layoutName !== "tree" && (this.selectToolActive() || Tools.current === "move")) {
         this.callbacks.onNodeDblTap?.(event.target.id());
       }
     });
