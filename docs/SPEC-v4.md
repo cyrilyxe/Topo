@@ -1,0 +1,33 @@
+# Topo — spec v4 : retours d'usage « from scratch »
+
+Complète SPEC.md et SPEC-editor.md. Toujours : le YAML est la source de vérité, éditions via `App.edit` + `DocEdit` (annulables, commentaires préservés), scripts globaux, UI FR / code EN.
+
+## A. Création, identifiants, copier-coller (vague A1)
+1. **Placement d'une nouvelle brique** : jamais au même endroit que la précédente. Position = premier emplacement libre dans le parent (à droite / sous les frères existants, grille), sans chevauchement (Repulsion.findFreeShift), position persistée comme une position manuelle.
+2. **Champs à suggestions** (type, rôle, de/vers…) : bouton ✕ qui vide le champ pour revoir toute la liste.
+3. **Id automatique** — réglage `ids.scheme` : `slug` (défaut, depuis le libellé) | `parent-slug` (`<id parent>-<slug>`) | `type-n` (`<type>-<n>` incrémental). Réglage `ids.followMove` (défaut false) : si l'id d'une brique est encore « automatique » (égal à ce que le schéma produirait), il est régénéré quand on la déplace ou la renomme.
+4. **Renommer un id** (formulaire Modifier, ou id régénéré) → `DocEdit.renameId(text, oldId, newId)` réécrit toutes les références : liens, `style.rules[].target`, `view` (collapsed, positions, layouts), `trash`. Si l'utilisateur change un id **dans l'éditeur texte** et que des liens cassent, une anomalie propose « Renommer les références `ancien` → `nouveau` » (détection : id disparu + id apparu à la même ligne).
+5. **Bug** : « Aller à la ligne » d'une anomalie ne marche plus après un renommage dans l'éditeur → lignes recalculées à chaque parse, saut fiable.
+6. **Copier / couper / coller** (Ctrl+C / Ctrl+X / Ctrl+V hors champs texte, + menu contextuel) : la sélection (briques + sous-arbres + liens internes à la sélection) est copiée dans le presse-papiers système sous forme de YAML `topo-clipboard: { nodes, links }` (marche entre onglets et entre projets). Collage dans la brique sélectionnée (sinon racine), ids régénérés selon `ids.scheme` en cas de conflit, liens internes réécrits, positions décalées.
+
+## B. Style (vague A2)
+1. **Texte** : couleur auto contrastée (luminance du fond effectif → texte sombre ou clair) par défaut ; surcharge par règle : `textColor`, `bold`, `italic`, `textBackground`. Idem pour les étiquettes de lien.
+2. **Couleurs** : à côté de chaque sélecteur, un champ hexa éditable (copier/coller, validation `#rgb`/`#rrggbb`).
+3. **Bordures** : `borderStyle` (solid | dashed | dotted | double), `borderWidth`.
+4. **Liens** : style par lien dans l'entrée YAML du lien (`links[].style: { color, width, line: solid|dashed|dotted, arrow: triangle|vee|triangle-backcurve|circle|square|diamond|tee|none, sourceArrow }`) ; éditeur de style de lien (onglet Style quand un lien est sélectionné) avec « par défaut » et les 5 derniers styles utilisés.
+5. **Styles nommés** (presets) : enregistrer le style courant d'une brique ou d'un lien sous un nom ; liste réutilisable ; stockés dans la config locale (`Settings` scope local, clé `style.presets`) et exportables dans le YAML (`style.presets`).
+
+## C. Légende & styles par rôle/type (vague B1)
+1. `style.roles: { <role>: {color, border, borderStyle, shape, textColor…} }` et `style.types: { <type>: {…} }`. Priorité : défaut type intégré < `style.types` < `style.roles` < règle de brique. « Revenir au défaut » à chaque niveau.
+2. **Formes** : `shape` (round-rectangle, rectangle, ellipse, hexagon, diamond, barrel, rhomboid, tag, star…).
+3. **Légende dynamique** : liste les types et rôles réellement utilisés + leurs styles ; clic sur une entrée = éditer le style du rôle/type (s'applique à toutes les briques concernées) ; barre de légende repliable / redimensionnable ; option afficher tout / utilisés seulement.
+4. Saisie d'un **nouveau rôle ou type** dans le formulaire → l'éditeur de style de ce rôle s'ouvre sous le champ (optionnel), le style devient le défaut des suivants.
+5. **Modification en masse** : multi-sélection → changer type / rôle / meta pour toutes (une entrée d'historique).
+6. **Filtre** : la recherche accepte `type:service role:user` (+ texte), et des puces de filtre par type/rôle depuis la légende (clic = filtrer, Maj+clic = cumuler).
+
+*Implémentation (B1/C)* : `Style.apply` fusionne type < `style.types` < `style.roles` < règle dans `data.rule` (+ `data.levels` pour la provenance) ; clés d'un rôle/type : color, border, borderStyle, borderWidth, shape, textColor, bold, italic, opacity, size. `shape` : onze formes, ignorée pour les groupes dépliés (Cytoscape les dessine en rectangle). Légende : `js/legend.js` (`Legend.openStyleEditor(kind, value, anchorEl)`, `Legend.resetStyle`), préférences en localStorage (`topo:legend-*`). Filtres : `Style.parseSearch / matchSearch / splitFilters` (valeurs d'une même clé en OU, clés différentes en ET, comparaison insensible à la casse). Modification en masse : bloc « Modifier la sélection » de l'Inspecteur.
+
+## D. Dispositions nommées & onglets (vague B2)
+1. **Dispositions figées nommées** : `view.layouts: { <nom>: { positions, collapsed, zoom, pan, layout } }` ; menu Vue → Dispositions : enregistrer sous…, appliquer, renommer, supprimer, mettre à jour.
+2. **Onglets de documents** : plusieurs projets/fichiers ouverts, barre d'onglets sous le header ; chaque onglet a son texte, fichier/handle, historique, vue, état dirty ; fermeture avec confirmation si modifié ; restaurés au rechargement (localStorage). Copier-coller entre onglets via A.6.
+3. (Facultatif) côte à côte : non prioritaire.

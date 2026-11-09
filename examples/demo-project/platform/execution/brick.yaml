@@ -1,0 +1,23 @@
+title: Exécution
+role: category
+nodes:
+  - id: api
+    label: API
+    type: service
+    meta:
+      repo: "https://github.com/exemple/api"
+  - id: workers
+    label: Workers
+    type: service
+links:
+  - from: api
+    to: workers
+    label: tâches asynchrones
+  # Ambigu : `resources` existe dans plusieurs briques
+  - from: api
+    to: resources
+    label: lit les ressources
+  # Faute de frappe volontaire (database)
+  - from: workers
+    to: databse
+    label: écrit

@@ -1,0 +1,12 @@
+{
+  "drop.repulsion": true,
+  "selection.tab": "keep",
+  "edges.curve": "bezier",
+  "edges.opacity": 1,
+  "nodes.size": 1,
+  "layout.default": "fcose",
+  "tree.indent": 28,
+  "meta.card.position": "top-right",
+  "meta.card.maxChars": 50,
+  "meta.card.maxLines": 3
+}
