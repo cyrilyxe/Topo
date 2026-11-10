@@ -682,3 +682,35 @@ button.danger:hover:not(:disabled) { background: var(--danger); filter: brightne
 .layout-badge { padding: 2px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; white-space: nowrap; }
 .layout-badge.modified { color: var(--text); border-style: dashed; }
 .forms-dialog button.danger[data-discard] { align-self: flex-start; }
+
+/* UI toggles & fullscreen */
+.menu-check kbd { margin-left: auto; }
+.menu-heading { padding: 4px 10px 2px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.dropdown-panel button[aria-checked="true"] { color: var(--accent); font-weight: 600; }
+
+body.side-hidden .editor-panel,
+body.side-hidden .splitter { display: none; }
+body.controls-hidden .graph-toolbar,
+body.controls-hidden .tools-bar,
+body.controls-hidden .tools-help { display: none; }
+
+.side-reveal { display: none; position: fixed; left: 0; top: 50%; z-index: 20; transform: translateY(-50%); width: 16px; height: 56px; padding: 0; line-height: 1; border-left: 0; border-radius: 0 8px 8px 0; background: var(--surface); color: var(--text-muted); box-shadow: var(--shadow); opacity: .6; }
+.side-reveal:hover, .side-reveal:focus-visible { opacity: 1; color: var(--accent); }
+body.side-hidden:not(.diagram-fullscreen) .side-reveal { display: block; }
+
+.edge-strip { display: none; position: fixed; z-index: 70; }
+.edge-left { left: 0; top: 0; bottom: 0; width: 6px; }
+.edge-top { left: 6px; right: 0; top: 0; height: 6px; }
+body.diagram-fullscreen.edge-reveal .edge-strip { display: block; }
+
+body.diagram-fullscreen .app-header,
+body.diagram-fullscreen .doc-tabs,
+body.diagram-fullscreen .editor-panel,
+body.diagram-fullscreen .splitter { display: none; }
+body.diagram-fullscreen .app-layout { padding: 0; }
+body.diagram-fullscreen .graph-panel { border: 0; border-radius: 0; }
+
+body.diagram-fullscreen.top-overlay .app-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 60; box-shadow: var(--shadow); }
+body.diagram-fullscreen.top-overlay .doc-tabs { display: flex; position: fixed; top: var(--header-h, 44px); left: 0; right: 0; z-index: 60; box-shadow: var(--shadow); }
+body.diagram-fullscreen.side-overlay .editor-panel { display: flex; position: fixed; top: 0; bottom: 0; left: 0; z-index: 55; width: var(--editor-width, 42%); min-width: 320px; border-radius: 0 var(--radius) var(--radius) 0; box-shadow: 6px 0 24px rgba(0, 0, 0, .35); }
+body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }

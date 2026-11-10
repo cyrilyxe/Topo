@@ -27,6 +27,7 @@ Aucun build, aucun backend. Les bibliothèques (js-yaml, Cytoscape, cytoscape-sv
 - Fichiers : Nouveau, Ouvrir, Enregistrer (Ctrl+S), Enregistrer sous (Ctrl+Maj+S), import JSON.
 - Persistance de la vue (repli, zoom, déplacement, disposition, positions) dans `localStorage` par document, et dans le bloc `view:` du fichier à l’enregistrement (option du menu Vue).
 - Exports : SVG, PNG, JSON, Mermaid.
+- Affichage : panneau latéral (Ctrl+B) et contrôles du diagramme masquables (menu Vue), menu Contrôles (outils, dispositions, ajuster, replier/déplier), plein écran du diagramme (Ctrl+Maj+F, Échap pour quitter ; en plein écran, le bord gauche révèle le panneau, le bord haut ou Alt le bandeau).
 - Aide (`?` ou F1) générée depuis le schéma, thème clair / sombre.
 
 ## Schéma résumé

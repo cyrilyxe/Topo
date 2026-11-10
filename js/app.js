@@ -1339,6 +1339,7 @@ const App = {
       "undo": () => this.undo(),
       "redo": () => this.redo(),
       "settings": () => SettingsUI.open(),
+      "fullscreen": () => ViewUi.toggleFullscreen(),
       "relayout": () => {
         Graph.relayout(this.layout);
         this.schedulePersistView();
@@ -1740,6 +1741,7 @@ const App = {
     this.initSplitter();
     this.bindUi();
     Layouts.init();
+    ViewUi.init();
     Tabs.init();
 
     if (Tabs.restore()) {

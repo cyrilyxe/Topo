@@ -90,10 +90,25 @@
       </div>
 
       <div class="dropdown">
+        <button type="button" id="controls-toggle" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Contrôles ▾</button>
+        <div id="controls-menu" class="dropdown-panel" role="menu" hidden></div>
+      </div>
+
+      <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Vue ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
           <button type="button" role="menuitem" data-cmd="undo" id="menu-undo" disabled>Annuler<kbd>Ctrl+Z</kbd></button>
           <button type="button" role="menuitem" data-cmd="redo" id="menu-redo" disabled>Rétablir<kbd>Ctrl+Y</kbd></button>
+          <hr />
+          <label class="menu-check">
+            <input id="opt-side-panel" type="checkbox" checked />
+            Panneau latéral<kbd>Ctrl+B</kbd>
+          </label>
+          <label class="menu-check">
+            <input id="opt-controls" type="checkbox" checked />
+            Contrôles du diagramme
+          </label>
+          <button type="button" role="menuitem" data-cmd="fullscreen">Plein écran<kbd>Ctrl+Maj+F</kbd></button>
           <hr />
           <label class="menu-check">
             <input id="opt-save-view" type="checkbox" checked />
@@ -187,6 +202,7 @@
 
         <button id="btn-zoom-in" type="button" class="icon-btn" title="Zoom avant" aria-label="Zoom avant">＋</button>
         <button id="btn-zoom-out" type="button" class="icon-btn" title="Zoom arrière" aria-label="Zoom arrière">－</button>
+        <button id="btn-fullscreen" type="button" class="icon-btn" title="Plein écran (Ctrl+Maj+F)" aria-label="Plein écran">⛶</button>
         <button id="btn-fit" type="button">Ajuster</button>
         <button id="btn-collapse-all" type="button">Tout replier</button>
         <button id="btn-expand-all" type="button">Tout déplier</button>
@@ -236,6 +252,9 @@
   </main>
 
   <div id="context-menu" class="context-menu" hidden></div>
+  <button id="side-reveal" type="button" class="side-reveal" title="Afficher le panneau latéral (Ctrl+B)" aria-label="Afficher le panneau latéral">›</button>
+  <div id="edge-left" class="edge-strip edge-left" aria-hidden="true"></div>
+  <div id="edge-top" class="edge-strip edge-top" aria-hidden="true"></div>
 
   <div id="help-modal" class="modal" hidden>
     <div class="modal-backdrop" data-close="1"></div>
@@ -276,6 +295,7 @@
   <script src="js/project.js"></script>
   <script src="js/layouts.js"></script>
   <script src="js/tabs.js"></script>
+  <script src="js/view-ui.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
