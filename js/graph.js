@@ -381,6 +381,8 @@ const Graph = {
       { selector: "edge[lsLine]", style: { "line-style": "data(lsLine)" } },
       { selector: "edge[lsArrow]", style: { "target-arrow-shape": "data(lsArrow)" } },
       { selector: "edge[lsSource]", style: { "source-arrow-shape": "data(lsSource)" } },
+      { selector: "edge.link-draft", style: { opacity: 1, "z-index": 940, events: "no", "overlay-opacity": 0 } },
+      { selector: "edge.link-draft.draft-dim", style: { opacity: 0.3 } },
       { selector: "node.dim, node.focus-dim", style: { opacity: 0.18 } },
       { selector: "edge.dim, edge.focus-dim", style: { opacity: 0.08 * edgeOpacity } },
       {
@@ -741,6 +743,10 @@ const Graph = {
 
     this.updateEdges();
 
+    if (typeof LinkSeries !== "undefined") {
+      LinkSeries.reinject();
+    }
+
     if (this.selectedId) {
       cy.getElementById(this.selectedId).addClass("selected-node");
     }
@@ -1007,6 +1013,18 @@ const Graph = {
     });
   },
 
+  // Copies the link style of an edge (data.linkStyle) into the data fields read by the stylesheet.
+  applyEdgeLinkStyle(edge) {
+    const link = edge.data("linkStyle") || {};
+
+    this.setData(edge, "lsColor", link.color);
+    this.setData(edge, "lsWidth", link.width);
+    this.setData(edge, "lsLine", link.line);
+    this.setData(edge, "lsArrow", link.arrow);
+    this.setData(edge, "lsSource", link.sourceArrow);
+    this.setData(edge, "lsText", link.textColor);
+  },
+
   // Colour, border and opacity go through data mappers so that state classes keep priority.
   applyStyle() {
     const scale = Style.scale();
@@ -1022,16 +1040,7 @@ const Graph = {
     this.cy.batch(() => {
       this.cy.edges().removeClass("hl-edge");
 
-      this.cy.edges().forEach((edge) => {
-        const link = edge.data("linkStyle") || {};
-
-        this.setData(edge, "lsColor", link.color);
-        this.setData(edge, "lsWidth", link.width);
-        this.setData(edge, "lsLine", link.line);
-        this.setData(edge, "lsArrow", link.arrow);
-        this.setData(edge, "lsSource", link.sourceArrow);
-        this.setData(edge, "lsText", link.textColor);
-      });
+      this.cy.edges().forEach((edge) => this.applyEdgeLinkStyle(edge));
 
       this.cy.nodes().not(".meta-card").forEach((node) => {
         const rule = node.data("rule") || {};

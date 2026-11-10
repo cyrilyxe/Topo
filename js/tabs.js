@@ -196,6 +196,12 @@
 
     if (!tab || id === this.activeId) return;
 
+    // An open link series is closed first (confirmation when drafts exist).
+    if (typeof LinkSeries !== "undefined" && LinkSeries.isActive()) {
+      LinkSeries.requestClose().then((closed) => { if (closed) this.switchTo(id); });
+      return;
+    }
+
     this.captureActive();
     this.activeId = id;
     this.loadInto(tab);

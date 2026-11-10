@@ -26,7 +26,6 @@ const Tools = {
   mod: false,
   muted: false,
   linkDrag: null,
-  series: null,
   panDrag: null,
   panned: false,
   hovered: null,
@@ -99,8 +98,13 @@ const Tools = {
       return;
     }
 
+    // Leaving the Link tool closes the series (with confirmation when drafts exist), then switches.
+    if (this.series && id !== "link") {
+      LinkSeries.requestClose().then((closed) => closed && this.setTool(id));
+      return;
+    }
+
     this.cancelLink();
-    this.endSeries();
     this.cancelMove();
     this.clearHover();
     this.tool = id;
@@ -357,18 +361,7 @@ const Tools = {
       return;
     }
 
-    const hit = this.nodeAt(original.clientX, original.clientY);
-    let source = hit;
-
-    // Link series: any press on a box (or a click in the void, which ends the series) works from the series source.
-    if (this.series) {
-      source = hit ? this.seriesSource() : null;
-
-      if (!source) {
-        this.endSeries();
-        return;
-      }
-    }
+    const source = this.nodeAt(original.clientX, original.clientY);
 
     if (!source) {
       return;
@@ -412,6 +405,10 @@ const Tools = {
       return;
     }
 
+    if (event.ctrlKey) {
+      this.linkDrag.ctrl = true;
+    }
+
     const rect = this.cy.container().getBoundingClientRect();
     const hover = this.nodeAt(event.clientX, event.clientY);
 
@@ -428,15 +425,15 @@ const Tools = {
 
   // ---- link series (several links from the same source) ----
 
+  // The series itself (drafts, panel) lives in LinkSeries; Tools only draws the armed source and the ghost line.
+  get series() {
+    return typeof LinkSeries !== "undefined" ? LinkSeries.state : null;
+  },
+
   seriesSource() {
     const node = this.series ? this.cy.getElementById(this.series.from) : null;
 
     return node && !node.empty() ? node : null;
-  },
-
-  startSeries(from, values) {
-    this.series = { from, values: { label: values.label || "", type: values.type || "" } };
-    this.markSeries();
   },
 
   markSeries() {
@@ -447,12 +444,8 @@ const Tools = {
     }
   },
 
+  // Visual end of the series (aura, ghost line); called by LinkSeries.finish.
   endSeries() {
-    if (!this.series) {
-      return;
-    }
-
-    this.series = null;
     this.cy.nodes().removeClass("link-series");
     this.cy.nodes().removeClass("link-hover");
 
@@ -470,7 +463,7 @@ const Tools = {
     const source = this.seriesSource();
 
     if (!source) {
-      this.endSeries();
+      this.hideLine();
       return;
     }
 
@@ -547,40 +540,44 @@ const Tools = {
     }
 
     const target = this.nodeAt(event.clientX, event.clientY);
+    // Ctrl may be pressed at any moment of the drag (and released before the end).
     const multi = Boolean(Settings.get("links.multi") || drag.ctrl || event.ctrlKey || this.series);
 
     this.cancelLink();
 
     if (!target) {
-      this.endSeries();
       return;
     }
 
-    if (target.id() === drag.source.id()) {
-      if (!this.series) {
-        App.inspectNode(target.id(), { tab: "inspector", center: false });
-      }
+    const clicked = target.id() === drag.source.id();
 
-      return;
-    }
+    if (this.series) {
+      // Series: a click on a box links the series source to it ; a drag between two boxes links those two.
+      const from = clicked ? this.series.from : drag.source.id();
 
-    this.addLink(drag.source.id(), target.id(), { multi });
-  },
-
-  // First link (or any link outside a series): form; with multi, the series then stays armed on `from`.
-  // Next links of a series reuse type / label without a form.
-  async addLink(from, to, options = {}) {
-    if (this.series && this.series.from === from) {
-      const values = Object.assign({ from, to }, this.series.values);
-
-      if (App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
-        App.showMessage(`${this.labelOf(from)} → ${this.labelOf(to)} créé`, "info");
+      if (from !== target.id()) {
+        LinkSeries.add(from, target.id());
         this.markSeries();
       }
 
       return;
     }
 
+    if (clicked) {
+      App.inspectNode(target.id(), { tab: "inspector", center: false });
+      return;
+    }
+
+    if (multi) {
+      LinkSeries.add(drag.source.id(), target.id());
+      this.markSeries();
+      return;
+    }
+
+    this.addLink(drag.source.id(), target.id());
+  },
+
+  async addLink(from, to) {
     const values = await Forms.link({ from, to });
 
     if (!values) {
@@ -590,12 +587,7 @@ const Tools = {
     const fresh = this.newLinkType(values.type);
 
     if (App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
-      App.showMessage(`Lien ajouté : ${values.from} → ${values.to}.${options.multi ? " Cliquez les autres cibles (Échap pour terminer)." : ""}`, "success");
-
-      if (options.multi) {
-        this.startSeries(values.from, values);
-      }
-
+      App.showMessage(`Lien ajouté : ${values.from} → ${values.to}.`, "success");
       this.offerLinkStyle(fresh);
     }
   },
@@ -1620,7 +1612,7 @@ const Tools = {
   onEscape() {
     if (this.series) {
       this.cancelLink();
-      this.endSeries();
+      LinkSeries.requestClose();
     } else if (this.linkDrag) {
       this.cancelLink();
     } else if (this.moveDrag) {

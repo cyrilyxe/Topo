@@ -77,6 +77,10 @@ const App = {
   loadText(text, options = {}) {
     clearTimeout(this.applyTimer);
 
+    if (typeof LinkSeries !== "undefined" && LinkSeries.isActive()) {
+      LinkSeries.finish();
+    }
+
     this.name = options.name || null;
     Files.current = { name: this.name, handle: options.handle || null };
     this.viewOverride = options.view || null;
@@ -896,7 +900,7 @@ const App = {
 
   // "Liens multiples" checkbox of the Link tool header (setting links.multi).
   linkMultiHtml() {
-    return `<label class="link-multi" title="Après un lien, rester armé sur la même source pour en créer d’autres (Échap pour terminer ; Ctrl fait de même)."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>`;
+    return `<label class="link-multi" title="Les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>`;
   },
 
   reduceSelection(nodeId, edgeId) {
@@ -1698,7 +1702,15 @@ const App = {
     Graph.cy.on("select unselect", () => this.scheduleSelectionChange());
     document.getElementById("selection-header").addEventListener("change", (event) => {
       if (event.target.matches("input[data-link-multi]")) {
-        Settings.set("links.multi", event.target.checked, Settings.source("links.multi") === "document" ? "document" : "local");
+        const checked = event.target.checked;
+        const apply = () => Settings.set("links.multi", checked, Settings.source("links.multi") === "document" ? "document" : "local");
+
+        // Unchecking while a series is open = closing it (with confirmation when drafts exist).
+        if (!checked && LinkSeries.isActive()) {
+          LinkSeries.requestClose().then((closed) => (closed ? apply() : this.updateSelectionHeader()));
+        } else {
+          apply();
+        }
       }
     });
     Settings.onChange((keys) => {

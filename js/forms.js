@@ -146,9 +146,9 @@ const Forms = {
   },
 
   // Offsets are relative to the centred position; the dialog always stays fully inside the window.
-  bindMove(modal, kind) {
-    const dialog = modal.querySelector(".forms-dialog");
-    const header = modal.querySelector(".modal-header");
+  bindMove(modal, kind, dialogEl, headerEl) {
+    const dialog = dialogEl || modal.querySelector(".forms-dialog");
+    const header = headerEl || modal.querySelector(".modal-header");
     const pos = { x: 0, y: 0 };
     const place = (x, y) => {
       const rect = dialog.getBoundingClientRect();

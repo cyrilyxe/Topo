@@ -102,3 +102,37 @@ test("settings meta.keys and links.multi: defaults, coercion, document override"
   assert.equal(values["links.multi"], true);
   assert.equal(sources["meta.keys"], "document");
 });
+
+const DocEdit = require("../js/doc-edit.js");
+
+const BASE = "# carte\nnodes:\n  - id: a\n  - id: b\n  - id: c\nlinks:\n  - { from: a, to: b }\n";
+
+test("addLinks: pairs with type, label and style going into style.links[type]", () => {
+  const next = DocEdit.addLinks(BASE, [{ from: "a", to: "c" }, { from: "b", to: "c" }, { from: "a", to: "c" }], { type: "async", label: "ev", style: { line: "dotted", color: "#ff0000" } });
+  const model = Model.parse(next);
+
+  assert.ok(next.startsWith("# carte"));
+  assert.equal(model.links.length, 3);
+  assert.ok(model.links.slice(1).every((l) => l.type === "async" && l.label === "ev" && Object.keys(l.style).length === 0));
+  assert.deepEqual(model.style.links.async, { line: "dotted", color: "#ff0000" });
+});
+
+test("addLinks: without type the style goes on each link; without style no style block", () => {
+  const styled = Model.parse(DocEdit.addLinks(BASE, [{ from: "a", to: "c" }, { from: "b", to: "c" }], { style: { width: 4 } }));
+
+  assert.deepEqual(styled.links.slice(1).map((l) => l.style), [{ width: 4 }, { width: 4 }]);
+  assert.equal(styled.style.links, undefined);
+
+  const plain = DocEdit.addLinks(BASE, [{ from: "a", to: "c" }], {});
+
+  assert.ok(!/style:/.test(plain));
+  assert.equal(DocEdit.addLinks(BASE, [], {}), BASE);
+});
+
+test("addLinks: merges with an existing style.links entry and keeps other style blocks", () => {
+  const text = `${BASE}style:\n  roles:\n    r: { color: "#111111" }\n  links:\n    async: { width: 3 }\n`;
+  const model = Model.parse(DocEdit.addLinks(text, [{ from: "a", to: "c" }], { type: "async", style: { line: "dashed" } }));
+
+  assert.deepEqual(model.style.links.async, { width: 3, line: "dashed" });
+  assert.equal(model.style.roles.r.color, "#111111");
+});
