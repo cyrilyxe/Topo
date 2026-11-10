@@ -334,10 +334,10 @@ const Project = {
       && this.bricks.some((brick) => brick.path === node.meta.source));
   },
 
-  async editSource(path) {
+  async editSource(path, options = {}) {
     const brick = this.bricks.find((item) => item.path === path);
 
-    if (!brick || !App.confirmDiscard()) {
+    if (!brick || (!options.force && !App.confirmDiscard())) {
       return;
     }
 
@@ -368,6 +368,19 @@ const Project = {
     setTimeout(() => this.rebuild({ force: true }).catch((error) => {
       App.showMessage(`Reconstruction impossible : ${error.message}`, "error");
     }), 0);
+  },
+
+  // File > Reload from disk: rereads every brick file and merges again (the disk-based undo stacks are dropped).
+  async reload() {
+    const path = this.mode === "source" ? this.sourcePath : null;
+
+    this.undoStack = [];
+    this.redoStack = [];
+    await this.rebuild({ force: true });
+
+    if (path && this.bricks.some((brick) => brick.path === path)) {
+      await this.editSource(path, { force: true });
+    }
   },
 
   async backToMerged() {
@@ -574,6 +587,7 @@ const Project = {
       }
 
       this.renderBanner();
+      FileWatch.onProjectTick();
     } catch {
       /* folder temporarily unreadable: retry on next tick */
     } finally {

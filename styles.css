@@ -738,3 +738,9 @@ body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }
 .link-series-win .ls-note { margin: 4px 0; font-size: 12px; color: var(--text-muted); }
 .link-series-win .ls-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .link-series-win .forms-field { display: grid; gap: 3px; margin: 6px 0; }
+
+/* File reload & watch */
+.file-banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: calc(100% - 24px); display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--warning); border-left-width: 4px; border-radius: var(--radius); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); font-size: 13px; }
+.file-banner[hidden] { display: none; }
+.file-banner button { padding: 2px 10px; cursor: pointer; }
+.doc-tab-stale { color: var(--warning); font-size: 12px; margin-left: 4px; }

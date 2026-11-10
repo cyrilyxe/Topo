@@ -1230,7 +1230,7 @@ const App = {
       const result = await Files.open();
 
       if (result) {
-        Tabs.openDocument(result.text, { name: result.name, handle: result.handle });
+        Tabs.openDocument(result.text, { name: result.name, handle: result.handle, sig: result.sig });
         this.showMessage(`« ${result.name} » ouvert.`, "success");
       }
     } catch (error) {
@@ -1252,6 +1252,10 @@ const App = {
       } else if (asNew) {
         result = await Files.saveAs(text, this.suggestedName());
       } else {
+        if (Files.current.handle && (await FileWatch.confirmOverwrite()) !== "overwrite") {
+          return;
+        }
+
         Files.current = { name: this.name, handle: Files.current.handle };
         result = await Files.save(text);
       }
@@ -1283,6 +1287,7 @@ const App = {
       this.persistText();
       this.persistView();
       this.updateDirty();
+      await FileWatch.markSaved();
       this.showMessage(`« ${this.name || "document"} » enregistré.`, "success");
     } catch (error) {
       this.showMessage(`Enregistrement impossible : ${error.message}`, "error");
@@ -1334,6 +1339,7 @@ const App = {
       "open": () => this.openFile(),
       "save": () => this.save(false),
       "save-as": () => this.save(true),
+      "reload": () => FileWatch.reload(),
       "import-json": () => this.openFile(),
       "close-tab": () => Tabs.close(),
       "next-tab": () => Tabs.step(1),
@@ -1611,6 +1617,9 @@ const App = {
       } else if (mod && key === "o") {
         event.preventDefault();
         this.openFile();
+      } else if (event.altKey && !mod && !event.shiftKey && (key === "r" || event.code === "KeyR")) {
+        event.preventDefault();
+        FileWatch.reload();
       } else if (mod && key === "w" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         Tabs.close();
@@ -1776,6 +1785,7 @@ const App = {
     Layouts.init();
     ViewUi.init();
     Tabs.init();
+    FileWatch.init();
 
     if (Tabs.restore()) {
       return;
