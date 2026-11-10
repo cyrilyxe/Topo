@@ -19,6 +19,10 @@
     return { key, type: "number", default: def, min, max, step, label, help };
   }
 
+  function list(key, def, label, help) {
+    return { key, type: "list", default: def, label, help };
+  }
+
   const SPEC_ALL = [
     bool("delete.relinkToParent", false, "Suppression : rattacher les liens au parent", "Case par défaut de la confirmation de suppression : les liens des briques supprimées sont rattachés à leur parent."),
     choice("ids.scheme", "slug", ["slug", "parent-slug", "type-n"], "Identifiants automatiques", "slug : depuis le libellé ; parent-slug : <id du parent>-<libellé> ; type-n : <type>-<n> incrémental."),
@@ -41,6 +45,8 @@
     choice("meta.card.position", "top-right", ["top-left", "top-right", "bottom-left", "bottom-right", "free"], "Fiche métadonnée : position", "Coin d’ancrage, ou free (déplaçable)."),
     num("meta.card.maxChars", 50, 10, 200, 1, "Fiche métadonnée : caractères par ligne", "Au-delà, le texte est tronqué."),
     num("meta.card.maxLines", 3, 1, 20, 1, "Fiche métadonnée : lignes", "Au-delà, la fiche est tronquée."),
+    bool("links.multi", false, "Liens multiples", "Mode Lien : après un premier lien, l’outil reste armé sur la même source pour créer d’autres liens sans formulaire (Échap ou clic dans le vide pour terminer ; Ctrl au relâchement fait de même)."),
+    list("meta.keys", ["owner", "status", "path", "repo", "version", "environment", "todo", "doc"], "Clés de métadonnées suggérées", "Clés proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (séparées par des virgules)."),
     { key: "style.presets", type: "object", hidden: true, default: { nodes: {}, links: {} }, label: "Styles nommés", help: "Styles de brique et de lien enregistrés (géré par l’onglet Style)." }
   ];
   const SPEC = SPEC_ALL.filter((s) => !s.hidden);
@@ -55,6 +61,11 @@
     if (!spec) return undefined;
     if (spec.type === "boolean") return typeof value === "boolean" ? value : undefined;
     if (spec.type === "enum") return spec.options.includes(value) ? value : undefined;
+    if (spec.type === "list") {
+      const items = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : null;
+      if (!items) return undefined;
+      return Array.from(new Set(items.filter((v) => typeof v === "string" || typeof v === "number").map((v) => String(v).trim()).filter(Boolean)));
+    }
     if (spec.type === "object") {
       if (!isPlain(value)) return undefined;
       const out = {};
@@ -155,7 +166,7 @@
     if (sk !== undefined) {
       const kept = {};
       const flat = flatten(raw[sk]);
-      Object.keys(flat).forEach((k) => { if (flat[k] !== base[k]) kept[k] = flat[k]; });
+      Object.keys(flat).forEach((k) => { if (JSON.stringify(flat[k]) !== JSON.stringify(base[k])) kept[k] = flat[k]; });
       out.settings = kept;
     }
     const style = pickKey(raw, ["style", "presentation"]);

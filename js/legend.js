@@ -22,6 +22,14 @@ const Legend = {
     { key: "shape", label: "Forme", kind: "select" },
     { key: "textColor", label: "Texte", kind: "color" }
   ],
+  LINK_FIELDS: [
+    { key: "color", label: "Couleur", kind: "color" },
+    { key: "width", label: "Épaisseur", kind: "number" },
+    { key: "line", label: "Trait", kind: "select" },
+    { key: "arrow", label: "Flèche (cible)", kind: "select" },
+    { key: "sourceArrow", label: "Flèche (source)", kind: "select" },
+    { key: "textColor", label: "Texte du libellé", kind: "color" }
+  ],
 
   root: null,
   body: null,
@@ -179,21 +187,39 @@ const Legend = {
       return Array.from(names).sort((a, b) => order(a) - order(b) || a.localeCompare(b)).map((name) => ({ kind, name, count: counts[kind].get(name) || 0 }));
     };
 
+    const linkNames = new Map(Style.linkTypes(model).map((item) => [item.name, item.count]));
+
+    if (all) {
+      own(style.links).forEach((name) => linkNames.set(name, linkNames.get(name) || 0));
+    }
+
     return {
       types: build("type", this.BUILTIN_TYPES.concat(own(style.types))),
-      roles: build("role", own(style.roles))
+      roles: build("role", own(style.roles)),
+      links: Array.from(linkNames, ([name, count]) => ({ kind: "link", name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     };
   },
 
   levelMap(model, kind) {
     const style = (model && model.style) || {};
 
-    return kind === "role" ? style.roles : style.types;
+    return kind === "role" ? style.roles : kind === "link" ? style.links : style.types;
   },
 
-  // Validated style entry of a role / type (empty when none).
+  // Key of the style block / French label of a legend kind.
+  blockKey(kind) {
+    return kind === "role" ? "roles" : kind === "link" ? "links" : "types";
+  },
+
+  kindLabel(kind) {
+    return kind === "role" ? "rôle" : kind === "link" ? "type de lien" : "type";
+  },
+
+  // Validated style entry of a role / type / link type (empty when none).
   entry(kind, value, model) {
-    return Style.levelOf(this.levelMap(model || this.model || App.getModel(), kind), value);
+    const map = this.levelMap(model || this.model || App.getModel(), kind);
+
+    return kind === "link" ? Style.levelOfLink(map, value) : Style.levelOf(map, value);
   },
 
   hasStyle(kind, value) {
@@ -209,10 +235,10 @@ const Legend = {
 
     this.model = model;
 
-    const { types, roles } = this.entries(model);
-    const section = (title, kind, list) => `<div class="lg-section"><span class="lg-title">${title}</span>${list.length ? list.map((item) => this.itemHtml(item, model)).join("") : "<em class=\"empty\">aucun</em>"}</div>`;
+    const { types, roles, links } = this.entries(model);
+    const section = (title, kind, list) => `<div class="lg-section"><span class="lg-title">${title}</span>${list.length ? list.map((item) => (item.kind === "link" ? this.linkItemHtml(item, model) : this.itemHtml(item, model))).join("") : "<em class=\"empty\">aucun</em>"}</div>`;
 
-    this.body.innerHTML = `${section("Types", "type", types)}${section("Rôles", "role", roles)}
+    this.body.innerHTML = `${section("Types", "type", types)}${section("Rôles", "role", roles)}${section("Liens", "link", links)}
       <div class="lg-section lg-misc"><span class="lg-title">Divers</span>
         <span class="lg-plain"><i class="dot collapsed"></i> Groupe replié</span>
         <span class="lg-plain"><i class="dot meta"></i> Méta-arête</span>
@@ -276,6 +302,18 @@ const Legend = {
       ${item.count ? `<small class="lg-count">${item.count}</small>` : ""}</span>`;
   },
 
+  // Legend entry of a link type: stroke preview (click = edit its style) and use count.
+  linkItemHtml(item, model) {
+    const value = escapeHtml(item.name);
+    const entry = this.entry("link", item.name, model);
+    const styled = Object.keys(entry).length > 0;
+
+    return `<span class="lg-item lg-link${item.count ? "" : " unused"}">
+      <button type="button" class="lg-sw lg-link-sw" data-lg="edit" data-kind="link" data-value="${value}" title="Éditer le style de ce type de lien" aria-label="Éditer le style du type de lien ${value}">${StyleUI.linkPreviewHtml(entry)}</button>
+      <button type="button" class="lg-name" data-lg="edit" data-kind="link" data-value="${value}" title="Éditer le style de ce type de lien${styled ? " (défini dans le fichier)" : ""}">${value}${styled ? " ✎" : ""}</button>
+      ${item.count ? `<small class="lg-count">${item.count}</small>` : ""}</span>`;
+  },
+
   // ---- filters (written into the search field) ----
 
   searchValue() {
@@ -324,7 +362,7 @@ const Legend = {
     box.innerHTML = chips.map((chip) => `<button type="button" class="lg-chip" data-lg="unfilter" data-kind="${chip.kind}" data-value="${escapeHtml(chip.value)}" title="Retirer ce filtre">${chip.kind}:${escapeHtml(chip.value)} ✕</button>`).join("")
       + (this.searchValue().trim() ? "<button type=\"button\" class=\"lg-chip lg-clear\" data-lg=\"clear\" title=\"Effacer la recherche et les filtres\" aria-label=\"Effacer la recherche et les filtres\">✕</button>" : "");
 
-    this.body.querySelectorAll(".lg-item").forEach((element) => {
+    this.body.querySelectorAll(".lg-item:not(.lg-link)").forEach((element) => {
       const button = element.querySelector(".lg-sw");
       const list = button.dataset.kind === "type" ? parts.types : parts.roles;
       const on = list.some((v) => v.toLowerCase() === button.dataset.value.toLowerCase());
@@ -357,9 +395,9 @@ const Legend = {
   // ---- writing style.roles / style.types ----
 
   setStyle(kind, value, patch) {
-    const key = kind === "role" ? "roles" : "types";
+    const key = this.blockKey(kind);
 
-    StyleUI.mutate(`Style du ${kind === "role" ? "rôle" : "type"} « ${value} »`, (style) => {
+    StyleUI.mutate(`Style du ${this.kindLabel(kind)} « ${value} »`, (style) => {
       const map = style[key] && typeof style[key] === "object" ? style[key] : {};
       const entry = Object.assign({}, map[value] || {});
 
@@ -384,13 +422,13 @@ const Legend = {
   },
 
   resetStyle(kind, value) {
-    const key = kind === "role" ? "roles" : "types";
+    const key = this.blockKey(kind);
 
     if (!this.hasStyle(kind, value) && !Object.prototype.hasOwnProperty.call(this.levelMap(App.getModel(), kind) || {}, value)) {
       return;
     }
 
-    StyleUI.mutate(`Style du ${kind === "role" ? "rôle" : "type"} « ${value} » : défaut`, (style) => {
+    StyleUI.mutate(`Style du ${this.kindLabel(kind)} « ${value} » : défaut`, (style) => {
       if (style[key]) {
         delete style[key][value];
       }
@@ -400,6 +438,10 @@ const Legend = {
   // ---- compact style editor (popover) ----
 
   fallbackColor(kind, value, field) {
+    if (kind === "link") {
+      return field === "color" ? StyleUI.toHex(Graph.token("--edge", "#8b98ad")) || "#8b98ad" : "#475569";
+    }
+
     if (field === "color") {
       const type = kind === "type" ? value : "default";
       const key = typeof Graph !== "undefined" ? Graph.typeKey(type) : "default";
@@ -420,17 +462,17 @@ const Legend = {
     }
 
     if (field.kind === "number") {
-      return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><input type="number" data-k="${field.key}" min="0" max="8" step="1" value="${current === undefined ? "" : escapeHtml(current)}" placeholder="défaut" /></span></div>`;
+      return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><input type="number" data-k="${field.key}" min="${kind === "link" ? 1 : 0}" max="8" step="1" value="${current === undefined ? "" : escapeHtml(current)}" placeholder="défaut" /></span></div>`;
     }
 
-    const options = field.key === "shape" ? Style.SHAPES : Style.BORDER_STYLES;
+    const options = { shape: Style.SHAPES, line: Style.LINK_LINES, arrow: Style.LINK_ARROWS, sourceArrow: Style.LINK_ARROWS }[field.key] || Style.BORDER_STYLES;
 
     return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><select data-k="${field.key}"><option value="">(défaut)</option>${options.map((name) => `<option value="${name}" ${current === name ? "selected" : ""}>${name}</option>`).join("")}</select></span></div>`;
   },
 
   // Opens the compact editor of a role / type style under (above) `anchor`.
   openStyleEditor(kind, value, anchor) {
-    if (kind !== "role" && kind !== "type") {
+    if (kind !== "role" && kind !== "type" && kind !== "link") {
       return;
     }
 
@@ -439,18 +481,20 @@ const Legend = {
     const model = App.getModel();
     const entry = this.entry(kind, value, model);
     const pop = document.createElement("div");
+    const isLink = kind === "link";
+    const label = this.kindLabel(kind);
 
     pop.className = "legend-pop";
     pop.setAttribute("role", "dialog");
-    pop.setAttribute("aria-label", `Style du ${kind === "role" ? "rôle" : "type"} ${value}`);
-    pop.innerHTML = `<div class="lg-pop-head"><strong>${kind === "role" ? "Rôle" : "Type"} « ${escapeHtml(value)} »</strong><button type="button" data-lg-close="1" aria-label="Fermer">✕</button></div>
-      <p class="lg-hint">S’applique à toutes les briques ${kind === "role" ? "de ce rôle" : "de ce type"} (une règle de brique reste prioritaire).</p>
-      ${this.FIELDS.map((field) => this.fieldHtml(field, kind, value, entry)).join("")}
-      <div class="lg-row lg-flags">
+    pop.setAttribute("aria-label", `Style du ${label} ${value}`);
+    pop.innerHTML = `<div class="lg-pop-head"><strong>${label.charAt(0).toUpperCase()}${label.slice(1)} « ${escapeHtml(value)} »</strong><button type="button" data-lg-close="1" aria-label="Fermer">✕</button></div>
+      <p class="lg-hint">${isLink ? "S’applique à tous les liens de ce type (le style propre à un lien reste prioritaire)." : `S’applique à toutes les briques ${kind === "role" ? "de ce rôle" : "de ce type"} (une règle de brique reste prioritaire).`}</p>
+      ${(isLink ? this.LINK_FIELDS : this.FIELDS).map((field) => this.fieldHtml(field, kind, value, entry)).join("")}
+      ${isLink ? "" : `<div class="lg-row lg-flags">
         <label><input type="checkbox" data-k="bold" ${entry.bold ? "checked" : ""} /> Gras</label>
         <label><input type="checkbox" data-k="italic" ${entry.italic ? "checked" : ""} /> Italique</label>
-      </div>
-      <div class="lg-pop-actions"><button type="button" data-lg-reset="1" title="Supprime le style de ce ${kind === "role" ? "rôle" : "type"} du fichier">Défaut</button></div>`;
+      </div>`}
+      <div class="lg-pop-actions"><button type="button" data-lg-reset="1" title="Supprime le style de ce ${label} du fichier">Défaut</button></div>`;
 
     document.body.appendChild(pop);
     this.pop = pop;
@@ -555,7 +599,7 @@ const Legend = {
 
       input.classList.remove("invalid");
     } else if (input.type === "number") {
-      patch = { [key]: input.value === "" ? null : Math.min(8, Math.max(0, Number(input.value))) };
+      patch = { [key]: input.value === "" ? null : Math.min(8, Math.max(kind === "link" ? 1 : 0, Number(input.value))) };
     } else {
       patch = { [key]: input.value || null };
     }

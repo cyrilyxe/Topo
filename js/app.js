@@ -866,13 +866,15 @@ const App = {
       return;
     }
 
+    const linkTool = ready && Tools.current === "link";
+
     if (!nodes.length && !edges.length) {
-      header.innerHTML = "";
-      header.hidden = true;
+      header.innerHTML = linkTool ? `<h3>Mode Lien</h3>${this.linkMultiHtml()}` : "";
+      header.hidden = !linkTool || !["editor", "inspector", "style"].includes(name);
       return;
     }
 
-    header.innerHTML = this.selectionHeaderHtml(nodes, edges, this.model);
+    header.innerHTML = this.selectionHeaderHtml(nodes, edges, this.model) + (linkTool ? this.linkMultiHtml() : "");
     header.hidden = !["editor", "inspector", "style"].includes(name);
   },
 
@@ -888,8 +890,13 @@ const App = {
     const name = (id) => (id && model.byId.has(id) ? model.byId.get(id).label : "…");
     const path = (id) => (id && model.byId.has(id) ? Model.pathLabel(id, model) : "…");
 
-    header.innerHTML = `<h3>Lien : ${escapeHtml(name(from))} → ${escapeHtml(name(to))}</h3><p class="path">${escapeHtml(path(from))} → ${escapeHtml(path(to))}</p>`;
+    header.innerHTML = `<h3>Lien : ${escapeHtml(name(from))} → ${escapeHtml(name(to))}</h3><p class="path">${escapeHtml(path(from))} → ${escapeHtml(path(to))}</p>${this.linkMultiHtml()}`;
     header.hidden = false;
+  },
+
+  // "Liens multiples" checkbox of the Link tool header (setting links.multi).
+  linkMultiHtml() {
+    return `<label class="link-multi" title="Après un lien, rester armé sur la même source pour en créer d’autres (Échap pour terminer ; Ctrl fait de même)."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>`;
   },
 
   reduceSelection(nodeId, edgeId) {
@@ -1689,6 +1696,16 @@ const App = {
 
     Graph.cy.on("render", () => this.moveCard());
     Graph.cy.on("select unselect", () => this.scheduleSelectionChange());
+    document.getElementById("selection-header").addEventListener("change", (event) => {
+      if (event.target.matches("input[data-link-multi]")) {
+        Settings.set("links.multi", event.target.checked, Settings.source("links.multi") === "document" ? "document" : "local");
+      }
+    });
+    Settings.onChange((keys) => {
+      if (keys.includes("links.multi")) {
+        this.updateSelectionHeader();
+      }
+    });
     document.getElementById("selection-header").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-sel-node], button[data-sel-edge]");
 

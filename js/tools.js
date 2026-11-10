@@ -26,6 +26,7 @@ const Tools = {
   mod: false,
   muted: false,
   linkDrag: null,
+  series: null,
   panDrag: null,
   panned: false,
   hovered: null,
@@ -99,6 +100,7 @@ const Tools = {
     }
 
     this.cancelLink();
+    this.endSeries();
     this.cancelMove();
     this.clearHover();
     this.tool = id;
@@ -117,6 +119,7 @@ const Tools = {
     cy.autounselectify(current === "hand");
 
     this.els.wrap.dataset.tool = current;
+    App.updateSelectionHeader();
     this.els.help.textContent = this.HELP[current];
     this.els.bar.querySelectorAll("[data-tool]").forEach((button) => {
       const active = button.dataset.tool === this.tool;
@@ -354,13 +357,24 @@ const Tools = {
       return;
     }
 
-    const source = this.nodeAt(original.clientX, original.clientY);
+    const hit = this.nodeAt(original.clientX, original.clientY);
+    let source = hit;
+
+    // Link series: any press on a box (or a click in the void, which ends the series) works from the series source.
+    if (this.series) {
+      source = hit ? this.seriesSource() : null;
+
+      if (!source) {
+        this.endSeries();
+        return;
+      }
+    }
 
     if (!source) {
       return;
     }
 
-    this.linkDrag = { source, shown: null };
+    this.linkDrag = { source, shown: null, ctrl: Boolean(original.ctrlKey) };
     this.els.tip.hidden = true;
     this.cy.userPanningEnabled(false);
     this.drawLine(event.renderedPosition);
@@ -389,6 +403,7 @@ const Tools = {
 
   linkMove(event) {
     if (!this.linkDrag) {
+      this.seriesGhost(event);
       return;
     }
 
@@ -406,9 +421,77 @@ const Tools = {
     this.drawLine({ x: event.clientX - rect.left, y: event.clientY - rect.top });
     this.cy.nodes().removeClass("link-hover");
 
-    if (hover && hover !== this.linkDrag.source) {
+    if (hover && hover.id() !== this.linkDrag.source.id()) {
       hover.addClass("link-hover");
     }
+  },
+
+  // ---- link series (several links from the same source) ----
+
+  seriesSource() {
+    const node = this.series ? this.cy.getElementById(this.series.from) : null;
+
+    return node && !node.empty() ? node : null;
+  },
+
+  startSeries(from, values) {
+    this.series = { from, values: { label: values.label || "", type: values.type || "" } };
+    this.markSeries();
+  },
+
+  markSeries() {
+    const source = this.seriesSource();
+
+    if (source) {
+      source.addClass("link-series");
+    }
+  },
+
+  endSeries() {
+    if (!this.series) {
+      return;
+    }
+
+    this.series = null;
+    this.cy.nodes().removeClass("link-series");
+    this.cy.nodes().removeClass("link-hover");
+
+    if (!this.linkDrag) {
+      this.hideLine();
+    }
+  },
+
+  // Armed series without a button pressed: the ghost line follows the pointer from the source.
+  seriesGhost(event) {
+    if (!this.series || this.current !== "link") {
+      return;
+    }
+
+    const source = this.seriesSource();
+
+    if (!source) {
+      this.endSeries();
+      return;
+    }
+
+    const rect = this.cy.container().getBoundingClientRect();
+    const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+
+    this.markSeries();
+    this.cy.nodes().removeClass("link-hover");
+
+    if (!inside || Forms.isOpen()) {
+      this.hideLine();
+      return;
+    }
+
+    const hover = this.nodeAt(event.clientX, event.clientY);
+
+    if (hover && hover.id() !== source.id()) {
+      hover.addClass("link-hover");
+    }
+
+    this.drawLine({ x: event.clientX - rect.left, y: event.clientY - rect.top }, source);
   },
 
   // While dragging a link, the inspector follows the hovered box (it cannot be clicked).
@@ -428,8 +511,8 @@ const Tools = {
     }
   },
 
-  drawLine(point) {
-    const from = this.linkDrag.source.renderedPosition();
+  drawLine(point, source) {
+    const from = (source || this.linkDrag.source).renderedPosition();
 
     this.els.line.setAttribute("x1", from.x);
     this.els.line.setAttribute("y1", from.y);
@@ -464,27 +547,76 @@ const Tools = {
     }
 
     const target = this.nodeAt(event.clientX, event.clientY);
+    const multi = Boolean(Settings.get("links.multi") || drag.ctrl || event.ctrlKey || this.series);
 
     this.cancelLink();
 
     if (!target) {
+      this.endSeries();
       return;
     }
 
     if (target.id() === drag.source.id()) {
-      App.inspectNode(target.id(), { tab: "inspector", center: false });
+      if (!this.series) {
+        App.inspectNode(target.id(), { tab: "inspector", center: false });
+      }
+
       return;
     }
 
-    this.addLink(drag.source.id(), target.id());
+    this.addLink(drag.source.id(), target.id(), { multi });
   },
 
-  async addLink(from, to) {
+  // First link (or any link outside a series): form; with multi, the series then stays armed on `from`.
+  // Next links of a series reuse type / label without a form.
+  async addLink(from, to, options = {}) {
+    if (this.series && this.series.from === from) {
+      const values = Object.assign({ from, to }, this.series.values);
+
+      if (App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
+        App.showMessage(`${this.labelOf(from)} → ${this.labelOf(to)} créé`, "info");
+        this.markSeries();
+      }
+
+      return;
+    }
+
     const values = await Forms.link({ from, to });
 
-    if (values && App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
-      App.showMessage(`Lien ajouté : ${values.from} → ${values.to}.`, "success");
+    if (!values) {
+      return;
     }
+
+    const fresh = this.newLinkType(values.type);
+
+    if (App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
+      App.showMessage(`Lien ajouté : ${values.from} → ${values.to}.${options.multi ? " Cliquez les autres cibles (Échap pour terminer)." : ""}`, "success");
+
+      if (options.multi) {
+        this.startSeries(values.from, values);
+      }
+
+      this.offerLinkStyle(fresh);
+    }
+  },
+
+  // A link type never seen before (no link, no style.links entry) gets its style editor offered.
+  newLinkType(type) {
+    const model = App.getModel();
+    const known = !type || (model && (model.links.some((l) => l.type === type) || (model.style && model.style.links && model.style.links[type])));
+
+    return known ? "" : type;
+  },
+
+  offerLinkStyle(type) {
+    if (!type || typeof Legend === "undefined" || typeof Legend.openStyleEditor !== "function") {
+      return;
+    }
+
+    const anchor = document.querySelector(".legend, #legend") || document.getElementById("cy");
+
+    setTimeout(() => Legend.openStyleEditor("link", type, anchor), 50);
+    App.showMessage(`Nouveau type de lien « ${type} » : définissez son style (il s'appliquera aux suivants).`, "info");
   },
 
   // ---- move tool ("Déplacer dans…") ----
@@ -1188,15 +1320,18 @@ const Tools = {
     }
 
     const { link, index } = found[0];
-    const values = await Forms.link({ from: link.from, to: link.to, label: link.label, editing: true });
+    const values = await Forms.link({ from: link.from, to: link.to, label: link.label, type: link.type, editing: true });
 
     if (!values) {
       return;
     }
 
-    const patch = { from: values.from, to: values.to, label: values.label || null };
+    const patch = { from: values.from, to: values.to, label: values.label || null, type: values.type || null };
+    const fresh = values.type !== (link.type || "") ? this.newLinkType(values.type) : "";
 
-    App.edit("Modification d’un lien", (text) => DocEdit.updateLink(text, index, patch));
+    if (App.edit("Modification d’un lien", (text) => DocEdit.updateLink(text, index, patch))) {
+      this.offerLinkStyle(fresh);
+    }
   },
 
   // ---- deletion ----
@@ -1483,7 +1618,10 @@ const Tools = {
   },
 
   onEscape() {
-    if (this.linkDrag) {
+    if (this.series) {
+      this.cancelLink();
+      this.endSeries();
+    } else if (this.linkDrag) {
       this.cancelLink();
     } else if (this.moveDrag) {
       this.cancelMove();

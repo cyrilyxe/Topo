@@ -84,6 +84,7 @@ const Forms = {
       });
 
       this.active = session;
+      this.bindMove(modal, opts.kind || "dialog");
 
       if (opts.setup) {
         opts.setup(form, check);
@@ -116,6 +117,80 @@ const Forms = {
     }
 
     session.resolve(value);
+  },
+
+  // ---- movable dialogs (drag the title bar; last offset remembered per form kind) ----
+
+  POS_KEY: "topo:form-pos:",
+
+  readPos(kind) {
+    try {
+      const pos = JSON.parse(localStorage.getItem(this.POS_KEY + kind) || "null");
+
+      return pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) ? pos : null;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  savePos(kind, pos) {
+    try {
+      if (pos) {
+        localStorage.setItem(this.POS_KEY + kind, JSON.stringify(pos));
+      } else {
+        localStorage.removeItem(this.POS_KEY + kind);
+      }
+    } catch (error) {
+      // storage unavailable: position just forgotten
+    }
+  },
+
+  // Offsets are relative to the centred position; the dialog always stays fully inside the window.
+  bindMove(modal, kind) {
+    const dialog = modal.querySelector(".forms-dialog");
+    const header = modal.querySelector(".modal-header");
+    const pos = { x: 0, y: 0 };
+    const place = (x, y) => {
+      const rect = dialog.getBoundingClientRect();
+      const baseLeft = rect.left - pos.x;
+      const baseTop = rect.top - pos.y;
+
+      pos.x = Math.round(Math.min(Math.max(x, -baseLeft), Math.max(-baseLeft, window.innerWidth - rect.width - baseLeft)));
+      pos.y = Math.round(Math.min(Math.max(y, -baseTop), Math.max(-baseTop, window.innerHeight - rect.height - baseTop)));
+      dialog.style.transform = pos.x || pos.y ? `translate(${pos.x}px, ${pos.y}px)` : "";
+    };
+    const saved = this.readPos(kind);
+
+    header.classList.add("forms-drag");
+
+    if (saved) {
+      place(saved.x, saved.y);
+    }
+
+    header.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target.closest("button, input, select, textarea, a")) {
+        return;
+      }
+
+      const startX = event.clientX - pos.x;
+      const startY = event.clientY - pos.y;
+      const move = (e) => place(e.clientX - startX, e.clientY - startY);
+      const stop = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", stop);
+        this.savePos(kind, { x: pos.x, y: pos.y });
+      };
+
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", stop);
+      event.preventDefault();
+    });
+    header.addEventListener("dblclick", (event) => {
+      if (!event.target.closest("button, input, select, textarea, a")) {
+        place(0, 0);
+        this.savePos(kind, null);
+      }
+    });
   },
 
   trapFocus(event, form) {
@@ -198,10 +273,76 @@ const Forms = {
 
   metaRow(key, value) {
     return `<div class="forms-meta-row">
-      <input type="text" data-meta="key" placeholder="clé" value="${escapeHtml(key)}" aria-label="Clé de métadonnée" />
-      <input type="text" data-meta="value" placeholder="valeur" value="${escapeHtml(value)}" aria-label="Valeur de métadonnée" />
+      ${this.combo(`<input type="text" data-meta="key" list="forms-meta-keys" placeholder="clé" value="${escapeHtml(key)}" aria-label="Clé de métadonnée" autocomplete="off" />`)}
+      ${this.combo(`<input type="text" data-meta="value" list="forms-meta-values" placeholder="valeur" value="${escapeHtml(value)}" aria-label="Valeur de métadonnée" autocomplete="off" />`)}
       <button type="button" data-act="meta-remove" title="Retirer cette métadonnée" aria-label="Retirer">✕</button>
     </div>`;
+  },
+
+  // Meta keys that are structure, not user data: never suggested.
+  META_RESERVED: ["show", "afficher", "links", "liens", "card", "source", "sourceId"],
+
+  // Pure. Suggestions for meta fields: { keys, values } where keys = project keys (most used first) then the
+  // `preset` keys (setting meta.keys), de-duplicated and without reserved keys; values[key] = values already used
+  // for that key (most used first).
+  metaSuggestions(model, preset) {
+    const configured = preset !== undefined ? preset : (typeof Settings !== "undefined" ? Settings.get("meta.keys") : []);
+    const counts = new Map();
+    const values = {};
+    const rank = (map) => Array.from(map, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).map((item) => item.name);
+
+    ((model && model.nodes) || []).forEach((node) => {
+      Object.entries((node && node.meta) || {}).forEach(([key, value]) => {
+        if (this.META_RESERVED.includes(key)) {
+          return;
+        }
+
+        counts.set(key, (counts.get(key) || 0) + 1);
+
+        if (["string", "number", "boolean"].includes(typeof value) && String(value) !== "") {
+          const bucket = values[key] || (values[key] = new Map());
+
+          bucket.set(String(value), (bucket.get(String(value)) || 0) + 1);
+        }
+      });
+    });
+
+    const keys = rank(counts);
+
+    (Array.isArray(configured) ? configured : []).forEach((key) => {
+      if (key && !this.META_RESERVED.includes(key) && !keys.includes(key)) {
+        keys.push(key);
+      }
+    });
+
+    Object.keys(values).forEach((key) => {
+      values[key] = rank(values[key]);
+    });
+
+    return { keys, values };
+  },
+
+  // Pure. Suggestions for the link form: link types (used ones first, then those only styled in style.links)
+  // and labels already used (most used first).
+  linkSuggestions(model) {
+    const used = typeof Style !== "undefined" ? Style.linkTypes(model).map((item) => item.name) : [];
+    const styled = model && model.style && model.style.links && typeof model.style.links === "object" ? Object.keys(model.style.links) : [];
+    const labels = new Map();
+
+    ((model && model.links) || []).forEach((link) => {
+      if (link.label) {
+        labels.set(link.label, (labels.get(link.label) || 0) + 1);
+      }
+    });
+
+    return {
+      types: Array.from(new Set([...used, ...styled])),
+      labels: Array.from(labels, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).map((item) => item.name)
+    };
+  },
+
+  options(list) {
+    return list.map((item) => `<option value="${escapeHtml(item)}"></option>`).join("");
   },
 
   scalarMeta(node) {
@@ -230,6 +371,7 @@ const Forms = {
     const metaRows = Object.entries(this.scalarMeta(node)).map(([key, value]) => this.metaRow(key, value)).join("");
     const parentText = parentId && model && model.byId.has(parentId) ? Model.pathLabel(parentId, model) : "(racine)";
     const state = { idTouched: Boolean(node) };
+    const suggest = this.metaSuggestions(model);
 
     const body = `
       ${this.field("Libellé", `<input type="text" name="label" required data-autofocus value="${escapeHtml(node ? node.label : "")}" />`)}
@@ -238,6 +380,8 @@ const Forms = {
       ${this.field("Rôle", this.combo(`<input type="text" name="role" list="forms-roles" value="${escapeHtml(node && node.role ? node.role : "")}" autocomplete="off" /><datalist id="forms-roles">${roles.map((r) => `<option value="${escapeHtml(r)}"></option>`).join("")}</datalist>`))}
       ${this.field("Parent", `<input type="text" readonly tabindex="-1" value="${escapeHtml(parentText)}" />`)}
       <fieldset class="forms-meta"><legend>Métadonnées</legend>
+        <datalist id="forms-meta-keys">${this.options(suggest.keys)}</datalist>
+        <datalist id="forms-meta-values"></datalist>
         <div data-rows>${metaRows}</div>
         <button type="button" data-act="meta-add">＋ Ajouter une métadonnée</button>
       </fieldset>`;
@@ -246,17 +390,31 @@ const Forms = {
       title: node ? `Modifier « ${node.label} »` : "Nouvelle brique",
       body,
       okLabel: node ? "Enregistrer" : "Créer",
-      setup: (form) => this.setupBrick(form, taken, state, Boolean(node), parentLocal),
+      kind: "brick",
+      setup: (form) => this.setupBrick(form, taken, state, Boolean(node), parentLocal, suggest),
       validate: (form) => this.validateBrick(form, taken),
       collect: (form) => this.collectBrick(form)
     });
   },
 
-  setupBrick(form, taken, state, editing, parentLocal) {
+  setupBrick(form, taken, state, editing, parentLocal, suggest) {
     const label = form.elements.label;
     const id = form.elements.id;
     const type = form.elements.type;
     const rows = form.querySelector("[data-rows]");
+    const valueList = form.querySelector("#forms-meta-values");
+
+    // Value suggestions follow the key of the row being edited.
+    const fillValues = (event) => {
+      const row = event.target.closest && event.target.closest(".forms-meta-row");
+
+      if (row && valueList && suggest) {
+        valueList.innerHTML = this.options(suggest.values[row.querySelector("[data-meta=key]").value.trim()] || []);
+      }
+    };
+
+    form.addEventListener("focusin", fillValues);
+    form.addEventListener("input", fillValues);
 
     if (!editing) {
       const propose = () => {
@@ -327,18 +485,21 @@ const Forms = {
 
   // ---- link ----
 
-  // options: { from, to, label, editing }. Resolves { from, to, label }.
+  // options: { from, to, label, type, editing }. Resolves { from, to, label, type }.
   link(options = {}) {
     const model = App.getModel();
+    const suggest = this.linkSuggestions(model);
     const body = `
       ${this.field("De", this.combo(`<input type="text" name="from" list="forms-nodes" value="${escapeHtml(options.from || "")}" autocomplete="off" />`))}
       ${this.field("Vers", this.combo(`<input type="text" name="to" list="forms-nodes" value="${escapeHtml(options.to || "")}" autocomplete="off" />`))}
       <datalist id="forms-nodes">${this.nodeOptions(model)}</datalist>
-      ${this.field("Libellé", `<input type="text" name="label" data-autofocus value="${escapeHtml(options.label || "")}" />`)}`;
+      ${this.field("Type", this.combo(`<input type="text" name="type" list="forms-link-types" value="${escapeHtml(options.type || "")}" autocomplete="off" /><datalist id="forms-link-types">${this.options(suggest.types)}</datalist>`), "Libre ; le style d’un type se règle dans la légende.")}
+      ${this.field("Libellé", this.combo(`<input type="text" name="label" list="forms-link-labels" data-autofocus value="${escapeHtml(options.label || "")}" autocomplete="off" /><datalist id="forms-link-labels">${this.options(suggest.labels)}</datalist>`))}`;
 
     return this.dialog({
       title: options.editing ? "Modifier le lien" : "Nouveau lien",
       body,
+      kind: "link",
       okLabel: options.editing ? "Enregistrer" : "Créer",
       validate: (form) => {
         const from = this.resolveNodeText(model, form.elements.from.value);
@@ -353,7 +514,8 @@ const Forms = {
       collect: (form) => ({
         from: this.resolveNodeText(model, form.elements.from.value),
         to: this.resolveNodeText(model, form.elements.to.value),
-        label: form.elements.label.value.trim()
+        label: form.elements.label.value.trim(),
+        type: form.elements.type.value.trim()
       })
     });
   },
@@ -368,6 +530,7 @@ const Forms = {
 
     return this.dialog({
       title: options.title,
+      kind: "confirm",
       body: `<div class="forms-message">${options.html}</div>${box}`,
       okLabel: options.okLabel || "Confirmer",
       danger: options.danger,
@@ -375,3 +538,7 @@ const Forms = {
     });
   }
 };
+
+if (typeof module === "object" && module.exports) {
+  module.exports = Forms;
+}

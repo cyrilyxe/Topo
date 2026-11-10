@@ -57,6 +57,7 @@
     assign(out, "from", pick(l, ["from", "de"]));
     assign(out, "to", pick(l, ["to", "vers"]));
     assign(out, "label", l.label);
+    assign(out, "type", l.type);
     assign(out, "meta", normalizeMeta(l.meta));
     assign(out, "style", normalizeLinkStyle(l.style));
     return out;
@@ -94,7 +95,7 @@
     const rules = pick(raw, ["rules", "regles"]);
     if (Array.isArray(rules)) out.rules = rules.map(normalizeRule);
     // Blocks owned by other features, kept as written.
-    ["presets", "roles", "types"].forEach((k) => { if (isObj(raw[k])) out[k] = raw[k]; });
+    ["presets", "roles", "types", "links"].forEach((k) => { if (isObj(raw[k])) out[k] = raw[k]; });
     return out;
   }
 
@@ -150,6 +151,7 @@
     h("Lien", "from", ["de"], "référence", "Nœud source : id, id qualifié (a.b.c) ou suffixe unique.", "- from: web"),
     h("Lien", "to", ["vers"], "référence", "Nœud cible (même syntaxe que from).", "  to: api"),
     h("Lien", "label", [], "texte", "Texte affiché sur l’arête.", "  label: requêtes HTTPS"),
+    h("Lien", "type", [], "texte libre", "Type du lien (libre : sync, async, dépendance…). Son style se règle une fois pour tous les liens du type dans style.links ou depuis la légende.", "  type: async"),
     h("Lien", "style", [], "objet", "Style du lien : color, width, line, arrow, sourceArrow, textColor.", "  style: { color: \"#e74c3c\", width: 3, line: dashed, arrow: vee }"),
     h("Lien", "style.color", [], "couleur", "Couleur du trait et des flèches.", "    color: \"#e74c3c\""),
     h("Lien", "style.width", [], "nombre 1–8", "Épaisseur du trait.", "    width: 3"),
@@ -176,6 +178,7 @@
     h("Style", "shape", ["forme"], "round-rectangle | rectangle | ellipse | hexagon | diamond | barrel | rhomboid | tag | star | octagon | cut-rectangle", "Forme du nœud (feuilles et groupes repliés ; un groupe déplié reste un rectangle). Valable dans une règle, un rôle ou un type.", "  shape: hexagon"),
     h("Style", "style.roles", ["roles"], "objet", "Style partagé par toutes les briques d’un rôle (clés : color, border, borderStyle, borderWidth, shape, textColor, bold, italic, opacity, size). Priorité : défaut du type < style.types < style.roles < règle de brique.", "style:\n  roles:\n    domain: { shape: hexagon, color: \"#fde68a\" }"),
     h("Style", "style.types", [], "objet", "Style partagé par toutes les briques d’un type (mêmes clés que style.roles).", "style:\n  types:\n    database: { shape: barrel }"),
+    h("Style", "style.links", [], "objet", "Style partagé par tous les liens d’un type : { <type>: {color, width, line, arrow, sourceArrow, textColor} }. Priorité : défaut < style.links[type] < links[].style.", "style:\n  links:\n    async: { line: dotted, arrow: vee, color: \"#7c3aed\" }"),
     h("Recherche", "type:x role:y", [], "filtre", "Dans le champ de recherche : type:service role:user (guillemets si espace : role:\"my role\"). Plusieurs valeurs d’une même clé = OU, clés différentes = ET ; combinable avec du texte ou une /regex/. Les puces de la légende écrivent ces filtres (Maj+clic : cumuler).", "type:service role:user api"),
     h("Style", "style.presets", [], "objet", "Styles nommés réutilisables : { nodes: {nom: {propriétés de règle}}, links: {nom: {propriétés de style de lien}} }. Copiés depuis l’onglet Style.", "style:\n  presets:\n    nodes:\n      Alerte: { color: \"#e74c3c\", borderStyle: dashed }\n    links:\n      Async: { line: dotted, arrow: vee }"),
     h("Vue", "view.collapsed", ["replies"], "liste d’ids", "Groupes repliés.", "view:\n  collapsed: [donnees]"),
@@ -201,6 +204,8 @@
     h("Réglages", "ui.sidePanel", [], "booléen", "Affiche le panneau latéral (défaut : true ; Vue > Panneau latéral, Ctrl+B).", "  ui.sidePanel: false"),
     h("Réglages", "ui.controls", [], "booléen", "Affiche la barre de contrôles et la palette d’outils du diagramme (défaut : true ; menu Contrôles).", "  ui.controls: false"),
     h("Réglages", "fullscreen.edgeReveal", [], "booléen", "Plein écran : le survol des bords (gauche : panneau, haut : bandeau) les fait apparaître en superposition (défaut : true).", "  fullscreen.edgeReveal: true"),
+    h("Réglages", "meta.keys", [], "liste de textes", "Clés de métadonnées proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (défaut : owner, status, path, repo, version, environment, todo, doc).", "  meta.keys: [owner, status, repo]"),
+    h("Réglages", "links.multi", [], "booléen", "Mode Lien : après un lien A→B, l’outil reste armé sur A pour créer A→C, etc. sans formulaire (case « Liens multiples » ; Ctrl au relâchement ou au clic fait de même ; Échap ou clic dans le vide termine). Défaut : false.", "  links.multi: true"),
     h("Réglages", "meta.card.when", [], "leaf | expanded | always | never", "Quand afficher la fiche métadonnée (défaut : never).", "  meta.card.when: leaf"),
     h("Réglages", "meta.card.position", [], "texte", "Ancrage de la fiche : top-left, top-right, bottom-left, bottom-right ou free (défaut : top-right).", "  meta.card.position: top-right"),
     h("Réglages", "meta.card.maxChars", [], "nombre", "Caractères par ligne avant troncature (défaut : 50).", "  meta.card.maxChars: 50"),
@@ -230,6 +235,7 @@
     { keys: "Ctrl+Tab / Ctrl+Maj+Tab", description: "Onglet suivant / précédent (app installée ; sinon menu Fichier)" },
     { keys: "Ctrl+W", description: "Fermer l’onglet (app installée ; sinon menu Fichier)" },
     { keys: "V / H / B / L / M", description: "Outil Sélection / Main / Brique / Lien / Déplacer dans…" },
+    { keys: "Ctrl (outil Lien)", description: "Tenu au clic ou au relâchement sur la cible : liens en série depuis la même source (comme la case « Liens multiples ») ; Échap ou clic dans le vide termine" },
     { keys: "Espace (maintenu)", description: "Main temporaire (déplacer la vue)" },
     { keys: "Maj/Ctrl + clic", description: "Ajouter ou retirer une brique de la sélection" },
     { keys: "Suppr / Retour arrière", description: "Supprimer la sélection (vers la corbeille)" },

@@ -411,7 +411,7 @@ const Graph = {
         style: { "overlay-color": t("--selection", "#7c3aed"), "overlay-opacity": 0.22, "overlay-padding": 7, "overlay-shape": "round-rectangle" }
       },
       {
-        selector: "node.tool-hover",
+        selector: "node.tool-hover, node.link-series",
         style: {
           "underlay-color": t("--hover-aura", "#38bdf8"),
           "underlay-opacity": 0.28,
