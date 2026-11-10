@@ -46,6 +46,7 @@
     num("meta.card.maxChars", 50, 10, 200, 1, "Fiche métadonnée : caractères par ligne", "Au-delà, le texte est tronqué."),
     num("meta.card.maxLines", 3, 1, 20, 1, "Fiche métadonnée : lignes", "Au-delà, la fiche est tronquée."),
     bool("links.multi", false, "Liens multiples", "Mode Lien : les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même ponctuellement."),
+    bool("links.multiAnchor", true, "Liens multiples : garder la source", "Série de liens : la source reste armée après chaque lien (clic droit pour la changer). Désactivé : elle est relâchée après chaque paire (clic source puis clic cible)."),
     list("meta.keys", ["owner", "status", "path", "repo", "version", "environment", "todo", "doc"], "Clés de métadonnées suggérées", "Clés proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (séparées par des virgules)."),
     { key: "style.presets", type: "object", hidden: true, default: { nodes: {}, links: {} }, label: "Styles nommés", help: "Styles de brique et de lien enregistrés (géré par l’onglet Style)." }
   ];

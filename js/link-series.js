@@ -39,6 +39,40 @@ const LinkSeries = {
     return true;
   },
 
+  // Arms `id` as the series source, or releases it (null): aura and ghost line follow.
+  setSource(id) {
+    if (!this.state) {
+      return;
+    }
+
+    this.state.from = id || null;
+
+    try {
+      Tools.endSeries();
+      Tools.markSeries();
+    } catch (error) { /* tools not ready */ }
+
+    this.updateHint();
+  },
+
+  updateHint() {
+    const s = this.state;
+    const hint = s && s.panel && s.panel.querySelector("[data-ls-hint]");
+
+    if (hint) {
+      hint.textContent = s.from ? `Source : ${this.nameOf(s.from)} — clic droit pour changer` : "Choisissez une source";
+    }
+  },
+
+  // Keeps the panel checkbox in step with links.multiAnchor.
+  syncAnchor() {
+    const box = this.state && this.state.panel && this.state.panel.querySelector("[data-ls-anchor]");
+
+    if (box) {
+      box.checked = Boolean(Settings.get("links.multiAnchor"));
+    }
+  },
+
   remove(index) {
     const s = this.state;
     const pair = s && s.pairs[index];
@@ -153,7 +187,8 @@ const LinkSeries = {
         <button type="button" class="icon-btn" data-ls="close" aria-label="Fermer la série">✕</button>
       </div>
       <div class="float-win-body">
-        <p class="ls-count"><strong data-ls-count></strong> <small>Cliquez d’autres briques pour ajouter des liens depuis « ${escapeHtml(this.nameOf(s.from))} » ; glissez d’une autre brique pour changer de source.</small></p>
+        <p class="ls-count"><strong data-ls-count></strong> <small data-ls-hint></small></p>
+        <label class="ls-anchor"><input type="checkbox" data-ls-anchor${Settings.get("links.multiAnchor") ? " checked" : ""} /> Garder la source</label>
         <ul class="ls-list" data-ls-list></ul>
         ${Forms.field("Type", Forms.combo(`<input type="text" name="ls-type" list="ls-types" autocomplete="off" /><datalist id="ls-types">${Forms.options(suggest.types)}</datalist>`))}
         ${Forms.field("Libellé", Forms.combo(`<input type="text" name="ls-label" list="ls-labels" autocomplete="off" /><datalist id="ls-labels">${Forms.options(suggest.labels)}</datalist>`))}
@@ -181,6 +216,7 @@ const LinkSeries = {
       }
     });
     this.renderList();
+    this.updateHint();
   },
 
   nameOf(id) {
@@ -326,7 +362,9 @@ const LinkSeries = {
       return;
     }
 
-    if (target.classList.contains("hex-input")) {
+    if (target.dataset.lsAnchor !== undefined) {
+      Settings.set("links.multiAnchor", target.checked, Settings.source("links.multiAnchor") === "document" ? "document" : "local");
+    } else if (target.classList.contains("hex-input")) {
       const hex = StyleUI.hexFrom(target.value);
       const prop = target.id === "ls-color-hex" ? "color" : "textColor";
 

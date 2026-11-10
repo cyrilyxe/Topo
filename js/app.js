@@ -900,7 +900,8 @@ const App = {
 
   // "Liens multiples" checkbox of the Link tool header (setting links.multi).
   linkMultiHtml() {
-    return `<label class="link-multi" title="Les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>`;
+    return `<label class="link-multi" title="Les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>
+      <label class="link-multi link-anchor" title="La source reste armée après chaque lien (clic droit pour la changer). Décoché : relâchée après chaque paire."><input type="checkbox" data-link-anchor="1"${Settings.get("links.multiAnchor") ? " checked" : ""}${Settings.get("links.multi") ? "" : " disabled"} /> Garder la source</label>`;
   },
 
   reduceSelection(nodeId, edgeId) {
@@ -1701,7 +1702,9 @@ const App = {
     Graph.cy.on("render", () => this.moveCard());
     Graph.cy.on("select unselect", () => this.scheduleSelectionChange());
     document.getElementById("selection-header").addEventListener("change", (event) => {
-      if (event.target.matches("input[data-link-multi]")) {
+      if (event.target.matches("input[data-link-anchor]")) {
+        Settings.set("links.multiAnchor", event.target.checked, Settings.source("links.multiAnchor") === "document" ? "document" : "local");
+      } else if (event.target.matches("input[data-link-multi]")) {
         const checked = event.target.checked;
         const apply = () => Settings.set("links.multi", checked, Settings.source("links.multi") === "document" ? "document" : "local");
 
@@ -1714,8 +1717,9 @@ const App = {
       }
     });
     Settings.onChange((keys) => {
-      if (keys.includes("links.multi")) {
+      if (keys.includes("links.multi") || keys.includes("links.multiAnchor")) {
         this.updateSelectionHeader();
+        LinkSeries.syncAnchor();
       }
     });
     document.getElementById("selection-header").addEventListener("click", (event) => {

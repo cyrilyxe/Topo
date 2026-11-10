@@ -229,8 +229,15 @@ const Tools = {
     container.addEventListener("auxclick", (event) => event.preventDefault());
     container.addEventListener("wheel", (event) => this.wheelZoom(event), { passive: false, capture: true });
     window.addEventListener("mousemove", (event) => this.panMove(event));
-    window.addEventListener("mouseup", () => {
+    window.addEventListener("mouseup", (event) => {
+      const drag = this.panDrag;
+
       this.panDrag = null;
+
+      // Plain right click (no drag) during a link series: release the armed source.
+      if (drag && !drag.moved && event.button === 2 && this.current === "link" && this.series) {
+        LinkSeries.setSource(null);
+      }
     });
     window.addEventListener("blur", () => {
       this.panDrag = null;
@@ -431,7 +438,7 @@ const Tools = {
   },
 
   seriesSource() {
-    const node = this.series ? this.cy.getElementById(this.series.from) : null;
+    const node = this.series && this.series.from ? this.cy.getElementById(this.series.from) : null;
 
     return node && !node.empty() ? node : null;
   },
@@ -552,12 +559,18 @@ const Tools = {
     const clicked = target.id() === drag.source.id();
 
     if (this.series) {
-      // Series: a click on a box links the series source to it ; a drag between two boxes links those two.
+      // Series: with no armed source a click chooses it ; otherwise a click on a box links the source to it,
+      // and a drag between two boxes links those two.
+      if (!this.series.from && clicked) {
+        LinkSeries.setSource(target.id());
+        return;
+      }
+
       const from = clicked ? this.series.from : drag.source.id();
 
       if (from !== target.id()) {
         LinkSeries.add(from, target.id());
-        this.markSeries();
+        this.afterPair(from);
       }
 
       return;
@@ -570,11 +583,22 @@ const Tools = {
 
     if (multi) {
       LinkSeries.add(drag.source.id(), target.id());
-      this.markSeries();
+      this.afterPair(drag.source.id());
       return;
     }
 
     this.addLink(drag.source.id(), target.id());
+  },
+
+  // After a pair was added: release the source (links.multiAnchor off) or keep / re-arm it.
+  afterPair(from) {
+    if (!Settings.get("links.multiAnchor")) {
+      LinkSeries.setSource(null);
+    } else if (this.series && !this.series.from) {
+      LinkSeries.setSource(from);
+    } else {
+      this.markSeries();
+    }
   },
 
   async addLink(from, to) {

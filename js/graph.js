@@ -924,7 +924,8 @@ const Graph = {
 
   // A right-drag that panned the view must not open a context menu.
   menuAllowed() {
-    return typeof Tools === "undefined" || !Tools.panned;
+    // No context menu during a link series (right click releases the series source instead).
+    return typeof Tools === "undefined" || (!Tools.panned && !(Tools.current === "link" && Tools.series));
   },
 
   setData(node, key, value) {
