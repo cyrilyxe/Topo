@@ -74,6 +74,35 @@ const App = {
     this.els.message.className = `message ${level}`;
   },
 
+  // A frequent YAML error is an unquoted value holding ": " (e.g. "Hors ligne : …"): offer to quote such values in one click.
+  offerQuoteFix(text) {
+    const fix = DocEdit.quoteUnsafeScalars(text);
+
+    if (!fix.lines.length || !this.els.message || (typeof Project !== "undefined" && Project.shouldRoute())) {
+      return;
+    }
+
+    try {
+      Model.parse(fix.text);
+    } catch (error) {
+      return;
+    }
+
+    const button = document.createElement("button");
+    const list = fix.lines.slice(0, 5).join(", ") + (fix.lines.length > 5 ? "…" : "");
+
+    button.type = "button";
+    button.className = "message-action";
+    button.textContent = `Mettre entre guillemets (ligne${fix.lines.length > 1 ? "s" : ""} ${list})`;
+    button.title = "Une valeur contient « : » sans guillemets ; la mettre entre guillemets corrige le YAML (annulable).";
+    button.addEventListener("click", () => {
+      if (this.edit(`Guillemets ajoutés (${fix.lines.length})`, (current) => DocEdit.quoteUnsafeScalars(current).text)) {
+        this.showMessage(`${fix.lines.length} valeur${fix.lines.length > 1 ? "s" : ""} mise${fix.lines.length > 1 ? "s" : ""} entre guillemets.`, "success");
+      }
+    });
+    this.els.message.append(" ", button);
+  },
+
   loadText(text, options = {}) {
     clearTimeout(this.applyTimer);
 
@@ -360,6 +389,7 @@ const App = {
       model = Model.parse(text);
     } catch (error) {
       this.showMessage(`Erreur YAML : ${error.message}`, "error");
+      this.offerQuoteFix(text);
 
       if (options.initial) {
         this.model = null;

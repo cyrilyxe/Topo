@@ -705,5 +705,48 @@
     return dump(ctx.doc);
   }
 
-  return { addNode, updateNode, removeNodes, moveNode, renameId, renameRefs, followId, exportNodes, slugify, autoId, isAutoId, ID_SCHEMES, reorder, addLink, addLinks, updateLink, removeLinks, setTopLevel, trashPush, trashRestore };
+  // Plain scalars holding ": " break YAML ("bad indentation of a mapping entry"); wrap them in double quotes.
+  // Returns { text, lines } with the 1-based lines changed. Block scalars (| >) and their content are left alone.
+  function quoteUnsafeScalars(text) {
+    const eol = text.includes("\r\n") ? "\r\n" : "\n";
+    const rows = text.split(/\r?\n/);
+    const lines = [];
+    let blockIndent = -1;
+
+    const out = rows.map((row, index) => {
+      const indent = row.search(/\S/);
+
+      if (blockIndent >= 0) {
+        if (indent < 0 || indent > blockIndent) {
+          return row;
+        }
+
+        blockIndent = -1;
+      }
+
+      const match = /^(\s*(?:-\s+)?[^\s#'"{[][^:#]*?:\s+)(.+?)\s*$/.exec(row);
+
+      if (!match) {
+        return row;
+      }
+
+      const value = match[2];
+
+      if (/^[|>][-+0-9]*$/.test(value)) {
+        blockIndent = indent;
+        return row;
+      }
+
+      if (/^["'[{&*!|>]/.test(value) || !(/:\s/.test(value) || /:$/.test(value))) {
+        return row;
+      }
+
+      lines.push(index + 1);
+      return `${match[1]}"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+    });
+
+    return { text: out.join(eol), lines };
+  }
+
+  return { quoteUnsafeScalars, addNode, updateNode, removeNodes, moveNode, renameId, renameRefs, followId, exportNodes, slugify, autoId, isAutoId, ID_SCHEMES, reorder, addLink, addLinks, updateLink, removeLinks, setTopLevel, trashPush, trashRestore };
 });

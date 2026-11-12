@@ -170,5 +170,7 @@ Garde une copie de la version que tu as fournie (ou retrouve-la via git). Quand 
 - Un nouveau `type` ou `role` est libre. Si `style.types` ou `style.roles` existe déjà, ajoute une entrée pour le nouveau, ou laisse l'utilisateur la créer depuis la légende.
 - Ids uniques globalement si possible ; sinon, références qualifiées obligatoires.
 - Pas de tabulations (indentation en espaces).
+- **Guillemets obligatoires** pour toute valeur qui contient « : » suivi d'un espace (fréquent en français : « Hors ligne : … »),
+  qui commence par `- [ { & * ! | > ' " % @` ou qui finit par « : ». Préfère `"…"` (échappe `\"`) ; un texte long va en `|`.
 - Ne supprime jamais les blocs `style:`, `view:`, `settings:`, `trash:` d'un fichier que l'utilisateur t'a rendu.
 - Garde la carte à hauteur d'humain : si elle dépasse ~80 briques, passe en briques multi-fichiers.

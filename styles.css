@@ -744,3 +744,6 @@ body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }
 .file-banner[hidden] { display: none; }
 .file-banner button { padding: 2px 10px; cursor: pointer; }
 .doc-tab-stale { color: var(--warning); font-size: 12px; margin-left: 4px; }
+
+/* ---- YAML quick fix ---- */
+.message .message-action { margin-left: 8px; padding: 1px 8px; border: 1px solid currentColor; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
