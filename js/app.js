@@ -958,7 +958,7 @@ const App = {
 
   // "Liens multiples" checkbox of the Link tool header (setting links.multi).
   linkMultiHtml() {
-    return `<label class="link-multi" title="Les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>
+    return `${Tools.linkPresetHtml()}<label class="link-multi" title="Les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>
       <label class="link-multi link-anchor" title="La source reste armée après chaque lien (clic droit pour la changer). Décoché : relâchée après chaque paire."><input type="checkbox" data-link-anchor="1"${Settings.get("links.multiAnchor") ? " checked" : ""}${Settings.get("links.multi") ? "" : " disabled"} /> Garder la source</label>`;
   },
 
@@ -1212,7 +1212,8 @@ const App = {
     ];
 
     if (!edge.data("isMeta")) {
-      actions.push({ separator: true, label: "Modifier le lien…", run: () => Tools.editLink(edgeId) });
+      actions.push({ separator: true, label: "Copier le style du lien", run: () => Tools.copyLinkStyle([edgeId]) });
+      actions.push({ label: "Modifier le lien…", run: () => Tools.editLink(edgeId) });
     }
 
     actions.push({
@@ -1881,6 +1882,11 @@ const App = {
       }
     });
     document.getElementById("selection-header").addEventListener("click", (event) => {
+      if (event.target.closest("button[data-link-preset-clear]")) {
+        Tools.clearLinkPreset();
+        return;
+      }
+
       const button = event.target.closest("button[data-sel-node], button[data-sel-edge]");
 
       if (button) {
@@ -1904,6 +1910,13 @@ const App = {
       "link-hover": (from, to) => this.hoverLink(from, to),
       "link-unhover": () => Graph.clearHover(),
       "link-center": (from, to) => this.centerOnLink(from, to),
+      "link-side": (index, key, value) => {
+        const raw = Tools.rawLinkIndexes(this.model, this.getText())[index];
+
+        if (raw !== undefined) {
+          this.edit("Ancrage d’un lien", (text) => DocEdit.updateLink(text, raw, Tools.sidePatch({ [key]: value })));
+        }
+      },
       "view-yaml": (id) => this.viewInYaml(id),
       "edit-source": (id) => {
         const node = this.model && this.model.byId.get(id);

@@ -91,6 +91,7 @@ settings:                   # réglages propres à ce fichier (prioritaires sur 
 - `shape` : round-rectangle, rectangle, ellipse, hexagon, diamond, barrel, rhomboid, tag, star… La forme est ignorée pour un groupe déplié.
 - `icon` (aussi dans `style.types` / `style.roles`) : nom intégré (server, database, cloud, user, users, mobile, laptop, api, queue, file, folder, lock, key, globe, wifi, bluetooth, usb, usb-c, house, building, city, gear) ou URL / data-URI d'image. Pas de logos de marques fournis. `iconOpacity` (0–1) facultatif. Exemple : `types: { database: { icon: database } }`.
 - La couleur du texte est contrastée automatiquement. Ne fixe `textColor` que pour un besoin précis.
+- `links[].fromSide` / `toSide` (facultatifs) : `top | right | bottom | left` (absent ou `auto` = automatique) ancrent le départ / l'arrivée du lien au milieu du côté de la brique ; plusieurs liens sur un même côté se répartissent le long de ce côté. Exemple : `- { from: web, to: api, toSide: top }`.
 - `links[].style` accepte `color`, `width`, `line` (solid | dashed | dotted), `arrow` et `sourceArrow` (triangle | vee | triangle-backcurve | circle | square | diamond | tee | none), et `textColor`.
 - Conventions de lecture : une couleur ou une forme partagée par un type ou un rôle forme une **légende**. Un `highlight` ou un style de lien particulier signale souvent un point d'attention : mentionne-le, sans en faire une exigence.
 

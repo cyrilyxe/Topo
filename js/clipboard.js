@@ -108,6 +108,11 @@
   };
 
   api.copy = async function copy(ids) {
+    // Only links selected (no brick): copy the link style as a preset of the Link tool.
+    if (!(ids && ids.length)) {
+      const picked = Tools.selection();
+      if (!picked.nodes.length && picked.edges.length) return Tools.copyLinkStyle(picked.edges);
+    }
     const targets = this.targetIds(ids);
     if (!targets.length) return false;
     const payload = DocEdit.exportNodes(App.getText(), targets);

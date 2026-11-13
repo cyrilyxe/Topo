@@ -168,9 +168,39 @@ const LinkSeries = {
   // ---- panel ----
 
   open(from) {
-    this.state = { from, pairs: [], type: "", label: "", style: {}, styleOpen: false, timer: null, panel: null };
+    this.state = { from, pairs: [], type: "", label: "", style: {}, styleOpen: false, timer: null, panel: null, preset: null };
     this.buildPanel();
     this.startAnimation();
+
+    if (typeof Tools !== "undefined" && Tools.linkPreset) {
+      this.applyPreset(Tools.linkPreset);
+    }
+  },
+
+  // Fills the panel fields (type, label, style) from a link preset {type, label, style}.
+  applyPreset(preset) {
+    const s = this.state;
+
+    if (!s || !preset) {
+      return;
+    }
+
+    s.type = preset.type || "";
+    s.label = preset.label || "";
+    s.style = Style.cleanLink(preset.style);
+    s.preset = { type: s.type, style: JSON.stringify(s.style) };
+
+    if (s.panel) {
+      s.panel.querySelector("[name=ls-type]").value = s.type;
+      s.panel.querySelector("[name=ls-label]").value = s.label;
+    }
+
+    this.refreshDrafts();
+    this.updateNote();
+
+    if (s.styleOpen) {
+      this.renderStyle();
+    }
   },
 
   buildPanel() {
@@ -255,7 +285,8 @@ const LinkSeries = {
     }
 
     const model = App.getModel();
-    const k = s.type && Object.keys(Style.cleanLink(s.style)).length && model ? model.links.filter((l) => l.type === s.type).length : 0;
+    const fromPreset = Boolean(s.preset) && s.preset.type === s.type && s.preset.style === JSON.stringify(Style.cleanLink(s.style));
+    const k = s.type && !fromPreset && Object.keys(Style.cleanLink(s.style)).length && model ? model.links.filter((l) => l.type === s.type).length : 0;
     const note = s.panel.querySelector("[data-ls-note]");
 
     note.hidden = !k;
@@ -449,7 +480,7 @@ const LinkSeries = {
       return;
     }
 
-    const done = App.edit(`Ajout de ${n} lien${n > 1 ? "s" : ""}`, (text) => DocEdit.addLinks(text, pairs, { type: s.type, label: s.label, style }));
+    const done = App.edit(`Ajout de ${n} lien${n > 1 ? "s" : ""}`, (text) => DocEdit.addLinks(text, pairs, { type: s.type, label: s.label, style, perLink: Boolean(s.preset) && s.preset.type === s.type && s.preset.style === JSON.stringify(style) }));
 
     if (done) {
       StyleUI.pushRecentLink(style);

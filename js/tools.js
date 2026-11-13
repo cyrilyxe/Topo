@@ -104,6 +104,11 @@ const Tools = {
       return;
     }
 
+    if (id !== "link" && this.linkPreset) {
+      this.linkPreset = null;
+      this.presetPrev = null;
+    }
+
     this.cancelLink();
     this.cancelMove();
     this.clearHover();
@@ -602,18 +607,87 @@ const Tools = {
   },
 
   async addLink(from, to) {
-    const values = await Forms.link({ from, to });
+    const preset = this.linkPreset;
+    const values = await Forms.link({ from, to, type: preset ? preset.type : "", label: preset ? preset.label : "" });
 
     if (!values) {
       return;
     }
 
     const fresh = this.newLinkType(values.type);
+    const link = preset && Object.keys(preset.style).length ? { ...values, style: { ...preset.style } } : values;
 
-    if (App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, values))) {
+    if (App.edit(`Ajout du lien ${from} → ${to}`, (text) => DocEdit.addLink(text, link))) {
       App.showMessage(`Lien ajouté : ${values.from} → ${values.to}.`, "success");
       this.offerLinkStyle(fresh);
     }
+  },
+
+  // ---- link preset (copy of a link: type, label, style) ----
+
+  linkPreset: null,
+  presetPrev: null,
+
+  // Copies {type, label, style} of the first real link of the given edges and switches to the Link tool.
+  copyLinkStyle(edgeIds) {
+    const edge = edgeIds && edgeIds.length ? this.cy.getElementById(edgeIds[0]) : null;
+    const found = !edge || edge.empty() || edge.data("isMeta") ? [] : this.linksOfEdge(edge);
+
+    if (!found.length) {
+      App.showMessage("Le style de ce lien ne peut pas être copié (lien groupé ou introuvable).", "warning");
+      return false;
+    }
+
+    const link = found[0].link;
+    const preset = { type: link.type || "", label: link.label || "", style: Style.cleanLink(link.style) };
+
+    if (!this.linkPreset) {
+      this.presetPrev = this.tool;
+    }
+
+    this.linkPreset = preset;
+
+    if (this.tool !== "link") {
+      this.setTool("link");
+    }
+
+    if (this.series) {
+      LinkSeries.applyPreset(preset);
+    }
+
+    App.updateSelectionHeader();
+    App.showMessage("Style du lien copié : les prochains liens le reprendront (Échap pour quitter).", "success");
+    return true;
+  },
+
+  // Removes the preset and goes back to the tool used before the copy.
+  clearLinkPreset() {
+    if (!this.linkPreset) {
+      return;
+    }
+
+    const previous = this.presetPrev || "select";
+
+    this.linkPreset = null;
+    this.presetPrev = null;
+
+    if (this.series) {
+      LinkSeries.requestClose().then((closed) => closed && this.setTool(previous));
+    } else {
+      this.setTool(previous);
+    }
+  },
+
+  linkPresetHtml() {
+    const preset = this.linkPreset;
+
+    if (!preset) {
+      return "";
+    }
+
+    const text = `Préréglage : ${preset.type || "sans type"}${preset.label ? ` « ${preset.label} »` : ""}`;
+
+    return `<span class="link-preset" title="Les liens créés reprennent ce type, ce libellé et ce style"><span>${escapeHtml(text)}</span> <button type="button" data-link-preset-clear="1" aria-label="Retirer le préréglage" title="Retirer le préréglage">✕</button></span>`;
   },
 
   // A link type never seen before (no link, no style.links entry) gets its style editor offered.
@@ -1336,18 +1410,31 @@ const Tools = {
     }
 
     const { link, index } = found[0];
-    const values = await Forms.link({ from: link.from, to: link.to, label: link.label, type: link.type, editing: true });
+    const values = await Forms.link({ from: link.from, to: link.to, label: link.label, type: link.type, fromSide: link.fromSide, toSide: link.toSide, editing: true });
 
     if (!values) {
       return;
     }
 
-    const patch = { from: values.from, to: values.to, label: values.label || null, type: values.type || null };
+    const patch = { from: values.from, to: values.to, label: values.label || null, type: values.type || null, ...this.sidePatch(values) };
     const fresh = values.type !== (link.type || "") ? this.newLinkType(values.type) : "";
 
     if (App.edit("Modification d’un lien", (text) => DocEdit.updateLink(text, index, patch))) {
       this.offerLinkStyle(fresh);
     }
+  },
+
+  // fromSide / toSide of a form result as a DocEdit.updateLink patch (auto = key removed).
+  sidePatch(values) {
+    const patch = {};
+
+    ["fromSide", "toSide"].forEach((key) => {
+      if (values[key] !== undefined) {
+        patch[key] = Model.normalizeSide(values[key]) || null;
+      }
+    });
+
+    return patch;
   },
 
   // ---- deletion ----
@@ -1641,6 +1728,8 @@ const Tools = {
       this.cancelLink();
     } else if (this.moveDrag) {
       this.cancelMove();
+    } else if (this.linkPreset) {
+      this.clearLinkPreset();
     } else if (this.tool !== "select") {
       this.setTool("select");
     } else {

@@ -722,6 +722,8 @@ body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }
 .link-multi { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
 .selection-header h3 + .link-multi { margin-left: 10px; }
 .link-multi.link-anchor { display: flex; margin-left: 20px; margin-top: 2px; }
+.link-preset { display: inline-flex; align-items: center; gap: 4px; margin: 4px 10px 0 10px; padding: 1px 4px 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: 12px; }
+.link-preset button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; padding: 0 4px; }
 .link-series-win .ls-anchor { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; font-size: 12px; color: var(--text-muted); }
 .lg-link .lg-link-sw { width: 34px; }
 .lg-link .lr-line { display: inline-block; width: 26px; vertical-align: middle; }

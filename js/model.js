@@ -334,6 +334,35 @@ style:
     return nodes;
   }
 
+  // ---------- link anchors (fromSide / toSide) ----------
+
+  const SIDE_NAMES = ["top", "right", "bottom", "left"];
+
+  // "top" | "right" | "bottom" | "left" (case-insensitive) or "" for auto / anything else (pure).
+  function normalizeSide(value) {
+    const side = String(value === undefined || value === null ? "" : value).trim().toLowerCase();
+    return SIDE_NAMES.includes(side) ? side : "";
+  }
+
+  // Cytoscape endpoint (percentages of the node box from its centre) of a side, shifted along the side
+  // by `shift` (fraction of the side length, 0 = middle). Null for auto / invalid sides (pure).
+  function sideEndpoint(side, shift) {
+    const name = normalizeSide(side);
+    if (!name) return null;
+    const along = Math.round((Number(shift) || 0) * 100) || 0;
+    if (name === "top") return `${along}% -50%`;
+    if (name === "bottom") return `${along}% 50%`;
+    if (name === "left") return `-50% ${along}%`;
+    return `50% ${along}%`;
+  }
+
+  // Evenly spread positions (fractions of the side length, centred on 0) for n ends on one side (pure).
+  function spreadOffsets(count, span) {
+    const n = Math.max(0, Math.floor(Number(count) || 0));
+    const width = span === undefined ? 0.7 : span;
+    return Array.from({ length: n }, (_, i) => (n < 2 ? 0 : ((i + 1) / (n + 1) - 0.5) * width * (n + 1) / n));
+  }
+
   function buildLinks(rawLinks, model, anomalies, lines) {
     const starts = linkLines(lines);
     const links = [];
@@ -359,7 +388,10 @@ style:
         anomalies.push({ level: "warning", code: "self-link", message: `Le lien n°${i + 1} relie « ${from} » à lui-même : ignoré.`, path: `links[${i}]`, line });
         return;
       }
-      links.push({ from: rf.id, to: rt.id, label: l.label ? String(l.label) : "", type: l.type ? String(l.type) : "", meta: isObj(l.meta) ? l.meta : {}, style: isObj(l.style) ? l.style : {}, line });
+      const link = { from: rf.id, to: rt.id, label: l.label ? String(l.label) : "", type: l.type ? String(l.type) : "", meta: isObj(l.meta) ? l.meta : {}, style: isObj(l.style) ? l.style : {}, line };
+      if (normalizeSide(l.fromSide)) link.fromSide = normalizeSide(l.fromSide);
+      if (normalizeSide(l.toSide)) link.toSide = normalizeSide(l.toSide);
+      links.push(link);
     });
     return links;
   }
@@ -498,7 +530,7 @@ style:
       }
       edges.set(key, {
         group: "edges",
-        data: { id: key, source, target, label: link.label, count: 1, isMeta },
+        data: { id: key, source, target, label: link.label, count: 1, isMeta, ...(isMeta ? {} : { fromSide: link.fromSide || "", toSide: link.toSide || "" }) },
         classes: isMeta ? "meta" : "normal"
       });
     });
@@ -595,6 +627,9 @@ style:
     depth,
     metaSummary,
     buildElements,
+    normalizeSide,
+    sideEndpoint,
+    spreadOffsets,
     linksOf,
     toMermaid,
     replaceTopLevelBlock,

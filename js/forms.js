@@ -494,7 +494,8 @@ const Forms = {
       ${this.field("Vers", this.combo(`<input type="text" name="to" list="forms-nodes" value="${escapeHtml(options.to || "")}" autocomplete="off" />`))}
       <datalist id="forms-nodes">${this.nodeOptions(model)}</datalist>
       ${this.field("Type", this.combo(`<input type="text" name="type" list="forms-link-types" value="${escapeHtml(options.type || "")}" autocomplete="off" /><datalist id="forms-link-types">${this.options(suggest.types)}</datalist>`), "Libre ; le style d’un type se règle dans la légende.")}
-      ${this.field("Libellé", this.combo(`<input type="text" name="label" list="forms-link-labels" data-autofocus value="${escapeHtml(options.label || "")}" autocomplete="off" /><datalist id="forms-link-labels">${this.options(suggest.labels)}</datalist>`))}`;
+      ${this.field("Libellé", this.combo(`<input type="text" name="label" list="forms-link-labels" data-autofocus value="${escapeHtml(options.label || "")}" autocomplete="off" /><datalist id="forms-link-labels">${this.options(suggest.labels)}</datalist>`))}
+      ${options.editing ? `${this.field("Ancrage départ", this.sideSelect("fromSide", options.fromSide))}${this.field("Ancrage arrivée", this.sideSelect("toSide", options.toSide))}` : ""}`;
 
     return this.dialog({
       title: options.editing ? "Modifier le lien" : "Nouveau lien",
@@ -515,9 +516,19 @@ const Forms = {
         from: this.resolveNodeText(model, form.elements.from.value),
         to: this.resolveNodeText(model, form.elements.to.value),
         label: form.elements.label.value.trim(),
-        type: form.elements.type.value.trim()
+        type: form.elements.type.value.trim(),
+        ...(form.elements.fromSide ? { fromSide: form.elements.fromSide.value, toSide: form.elements.toSide.value } : {})
       })
     });
+  },
+
+  SIDE_CHOICES: [["auto", "Auto"], ["top", "Haut"], ["right", "Droite"], ["bottom", "Bas"], ["left", "Gauche"]],
+
+  // Anchor selector of a link end ("auto" when the link does not set one).
+  sideSelect(name, value) {
+    const current = (typeof Model !== "undefined" && Model.normalizeSide(value)) || "auto";
+
+    return `<select name="${name}">${this.SIDE_CHOICES.map(([side, label]) => `<option value="${side}"${side === current ? " selected" : ""}>${label}</option>`).join("")}</select>`;
   },
 
   // ---- confirmation ----

@@ -58,6 +58,8 @@
     assign(out, "to", pick(l, ["to", "vers"]));
     assign(out, "label", l.label);
     assign(out, "type", l.type);
+    assign(out, "fromSide", l.fromSide);
+    assign(out, "toSide", l.toSide);
     assign(out, "meta", normalizeMeta(l.meta));
     assign(out, "style", normalizeLinkStyle(l.style));
     return out;
@@ -154,6 +156,8 @@
     h("Lien", "to", ["vers"], "référence", "Nœud cible (même syntaxe que from).", "  to: api"),
     h("Lien", "label", [], "texte", "Texte affiché sur l’arête.", "  label: requêtes HTTPS"),
     h("Lien", "type", [], "texte libre", "Type du lien (libre : sync, async, dépendance…). Son style se règle une fois pour tous les liens du type dans style.links ou depuis la légende.", "  type: async"),
+    h("Lien", "fromSide", [], "auto | top | right | bottom | left", "Ancrage du départ : côté de la brique source où le lien démarre (milieu du côté). Défaut : auto. Plusieurs liens sur le même côté se répartissent le long de ce côté.", "  fromSide: right"),
+    h("Lien", "toSide", [], "auto | top | right | bottom | left", "Ancrage de l’arrivée : côté de la brique cible où le lien arrive (milieu du côté). Défaut : auto.", "  toSide: top"),
     h("Lien", "style", [], "objet", "Style du lien : color, width, line, arrow, sourceArrow, textColor.", "  style: { color: \"#e74c3c\", width: 3, line: dashed, arrow: vee }"),
     h("Lien", "style.color", [], "couleur", "Couleur du trait et des flèches.", "    color: \"#e74c3c\""),
     h("Lien", "style.width", [], "nombre 1–8", "Épaisseur du trait.", "    width: 3"),
@@ -246,11 +250,12 @@
     { keys: "Ctrl+W", description: "Fermer l’onglet (app installée ; sinon menu Fichier)" },
     { keys: "V / H / B / L / M", description: "Outil Sélection / Main / Brique / Lien / Déplacer dans…" },
     { keys: "Ctrl (outil Lien)", description: "Tenu pendant le tracé d’un lien : série de liens (comme la case « Liens multiples ») = brouillon dans le panneau « Série de liens » ; clic sur d’autres briques = liens depuis la même source ; « Créer n liens » les écrit d’un coup ; Échap / Annuler (avec confirmation) abandonne" },
+    { keys: "Ctrl+C (lien sélectionné)", description: "Copier le style du lien (aussi menu contextuel « Copier le style du lien ») : passe en mode Lien avec le préréglage {type, libellé, style} ; chaque lien créé ensuite (simple ou série) le reprend. ✕ dans l’en-tête ou Échap : retire le préréglage et revient à l’outil précédent" },
     { keys: "Clic droit (série de liens)", description: "Relâche la source armée ; le clic suivant sur une brique la choisit comme nouvelle source, le suivant crée la paire (un clic droit maintenu et déplacé déplace toujours la vue ; pas de menu contextuel pendant une série)" },
     { keys: "Espace (maintenu)", description: "Main temporaire (déplacer la vue)" },
     { keys: "Maj/Ctrl + clic", description: "Ajouter ou retirer une brique de la sélection" },
     { keys: "Suppr / Retour arrière", description: "Supprimer la sélection (vers la corbeille)" },
-    { keys: "Ctrl+C / Ctrl+X / Ctrl+V", description: "Copier / couper / coller les briques sélectionnées (YAML dans le presse-papiers ; collage dans la brique sélectionnée, sinon à la racine)" },
+    { keys: "Ctrl+C / Ctrl+X / Ctrl+V", description: "Copier / couper / coller les briques sélectionnées (avec uniquement des liens sélectionnés : copie le style du lien, voir ci-dessus ; YAML dans le presse-papiers ; collage dans la brique sélectionnée, sinon à la racine)" },
     { keys: "Ctrl+]  /  Ctrl+[", description: "Avancer / reculer la brique sélectionnée d’un plan" },
     { keys: "Ctrl+Maj+]  /  Ctrl+Maj+[", description: "Premier plan / arrière-plan" },
     { keys: "Ctrl+B", description: "Afficher / masquer le panneau latéral" },
