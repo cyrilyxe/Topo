@@ -1,13 +1,15 @@
 "use strict";
 
+const CustomShapes = typeof Shapes !== "undefined" ? Shapes : require("./shapes.js");
+
 const Style = {
   userScale: 1,
   modelSize: 1,
 
-  RULE_KEYS: ["label", "color", "border", "opacity", "size", "highlight", "hidden", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape"],
+  RULE_KEYS: ["label", "color", "border", "opacity", "size", "highlight", "hidden", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape", "icon", "iconOpacity"],
   // Properties a style.roles / style.types entry may carry.
-  LEVEL_KEYS: ["color", "border", "borderStyle", "borderWidth", "shape", "textColor", "bold", "italic", "opacity", "size"],
-  SHAPES: ["round-rectangle", "rectangle", "ellipse", "hexagon", "diamond", "barrel", "rhomboid", "tag", "star", "octagon", "cut-rectangle"],
+  LEVEL_KEYS: ["color", "border", "borderStyle", "borderWidth", "shape", "icon", "iconOpacity", "textColor", "bold", "italic", "opacity", "size"],
+  SHAPES: ["round-rectangle", "rectangle", "ellipse", "hexagon", "diamond", "barrel", "rhomboid", "tag", "star", "octagon", "cut-rectangle", ...CustomShapes.names()],
   BORDER_STYLES: ["solid", "dashed", "dotted", "double"],
   LINK_LINES: ["solid", "dashed", "dotted"],
   LINK_ARROWS: ["triangle", "vee", "triangle-backcurve", "circle", "square", "diamond", "tee", "none"],
@@ -272,6 +274,17 @@ const Style = {
 
     if (this.SHAPES.includes(rule.shape)) {
       result.shape = rule.shape;
+    }
+
+    // Icon: built-in name, URL or data-URI (resolved by Icons.resolve).
+    if (typeof rule.icon === "string" && rule.icon.trim() && !/[\r\n]/.test(rule.icon.trim())) {
+      result.icon = rule.icon.trim();
+    }
+
+    const iconOpacity = Number(rule.iconOpacity);
+
+    if (rule.iconOpacity !== undefined && rule.iconOpacity !== null && rule.iconOpacity !== "" && iconOpacity >= 0 && iconOpacity <= 1) {
+      result.iconOpacity = iconOpacity;
     }
 
     return result;

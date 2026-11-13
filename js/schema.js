@@ -58,6 +58,8 @@
     assign(out, "to", pick(l, ["to", "vers"]));
     assign(out, "label", l.label);
     assign(out, "type", l.type);
+    assign(out, "fromSide", l.fromSide);
+    assign(out, "toSide", l.toSide);
     assign(out, "meta", normalizeMeta(l.meta));
     assign(out, "style", normalizeLinkStyle(l.style));
     return out;
@@ -78,7 +80,9 @@
     ["textBackground", ["textBackground", "fond_texte"]],
     ["borderStyle", ["borderStyle", "style_bordure"]],
     ["borderWidth", ["borderWidth", "epaisseur_bordure"]],
-    ["shape", ["shape", "forme"]]
+    ["shape", ["shape", "forme"]],
+    ["icon", ["icon", "icone"]],
+    ["iconOpacity", ["iconOpacity", "opacite_icone"]]
   ];
 
   function normalizeRule(raw) {
@@ -152,6 +156,8 @@
     h("Lien", "to", ["vers"], "référence", "Nœud cible (même syntaxe que from).", "  to: api"),
     h("Lien", "label", [], "texte", "Texte affiché sur l’arête.", "  label: requêtes HTTPS"),
     h("Lien", "type", [], "texte libre", "Type du lien (libre : sync, async, dépendance…). Son style se règle une fois pour tous les liens du type dans style.links ou depuis la légende.", "  type: async"),
+    h("Lien", "fromSide", [], "auto | top | right | bottom | left", "Ancrage du départ : côté de la brique source où le lien démarre (milieu du côté). Défaut : auto. Plusieurs liens sur le même côté se répartissent le long de ce côté.", "  fromSide: right"),
+    h("Lien", "toSide", [], "auto | top | right | bottom | left", "Ancrage de l’arrivée : côté de la brique cible où le lien arrive (milieu du côté). Défaut : auto.", "  toSide: top"),
     h("Lien", "style", [], "objet", "Style du lien : color, width, line, arrow, sourceArrow, textColor.", "  style: { color: \"#e74c3c\", width: 3, line: dashed, arrow: vee }"),
     h("Lien", "style.color", [], "couleur", "Couleur du trait et des flèches.", "    color: \"#e74c3c\""),
     h("Lien", "style.width", [], "nombre 1–8", "Épaisseur du trait.", "    width: 3"),
@@ -175,8 +181,10 @@
     h("Style", "textBackground", ["fond_texte"], "couleur", "Fond derrière le texte (le texte auto se contraste avec lui).", "  textBackground: \"#fff3bf\""),
     h("Style", "borderStyle", ["style_bordure"], "solid | dashed | dotted | double", "Style de la bordure du nœud.", "  borderStyle: dashed"),
     h("Style", "borderWidth", ["epaisseur_bordure"], "nombre 0–8", "Épaisseur de la bordure en pixels.", "  borderWidth: 4"),
-    h("Style", "shape", ["forme"], "round-rectangle | rectangle | ellipse | hexagon | diamond | barrel | rhomboid | tag | star | octagon | cut-rectangle", "Forme du nœud (feuilles et groupes repliés ; un groupe déplié reste un rectangle). Valable dans une règle, un rôle ou un type.", "  shape: hexagon"),
-    h("Style", "style.roles", ["roles"], "objet", "Style partagé par toutes les briques d’un rôle (clés : color, border, borderStyle, borderWidth, shape, textColor, bold, italic, opacity, size). Priorité : défaut du type < style.types < style.roles < règle de brique.", "style:\n  roles:\n    domain: { shape: hexagon, color: \"#fde68a\" }"),
+    h("Style", "shape", ["forme"], "round-rectangle | rectangle | ellipse | hexagon | diamond | barrel | rhomboid | tag | star | octagon | cut-rectangle | file | folder | cloud | document | cylinder-h | arrow | chevron | shield | speech | ticket | house", "Forme du nœud (formes personnalisées : file = fichier, folder = dossier, cloud = nuage, document, cylinder-h = cylindre couché, arrow = flèche, chevron, shield = bouclier, speech = bulle, ticket, house = maison ; feuilles et groupes repliés ; un groupe déplié reste un rectangle). Valable dans une règle, un rôle ou un type.", "  shape: hexagon"),
+    h("Style", "icon", ["icone"], "nom | URL | data:image", "Icône de la brique : nom intégré (server, database, cloud, user, users, mobile, laptop, api, queue, file, folder, lock, key, globe, wifi, bluetooth, usb, usb-c, house, building, city, gear) ou URL / data-URI d’image (SVG, PNG ; importable depuis l’onglet Style, 200 Ko max). À gauche du libellé sur une feuille ou un groupe replié ; en filigrane sur un groupe déplié. Valable dans une règle, un rôle ou un type.", "  icon: database"),
+    h("Style", "iconOpacity", ["opacite_icone"], "nombre 0–1", "Opacité de l’icône (défaut : 1 ; 0.12 pour le filigrane d’un groupe déplié).", "  iconOpacity: 0.5"),
+    h("Style", "style.roles", ["roles"], "objet", "Style partagé par toutes les briques d’un rôle (clés : color, border, borderStyle, borderWidth, shape, icon, iconOpacity, textColor, bold, italic, opacity, size). Priorité : défaut du type < style.types < style.roles < règle de brique.", "style:\n  roles:\n    domain: { shape: hexagon, color: \"#fde68a\" }"),
     h("Style", "style.types", [], "objet", "Style partagé par toutes les briques d’un type (mêmes clés que style.roles).", "style:\n  types:\n    database: { shape: barrel }"),
     h("Style", "style.links", [], "objet", "Style partagé par tous les liens d’un type : { <type>: {color, width, line, arrow, sourceArrow, textColor} }. Priorité : défaut < style.links[type] < links[].style.", "style:\n  links:\n    async: { line: dotted, arrow: vee, color: \"#7c3aed\" }"),
     h("Recherche", "type:x role:y", [], "filtre", "Dans le champ de recherche : type:service role:user (guillemets si espace : role:\"my role\"). Plusieurs valeurs d’une même clé = OU, clés différentes = ET ; combinable avec du texte ou une /regex/. Les puces de la légende écrivent ces filtres (Maj+clic : cumuler).", "type:service role:user api"),
@@ -204,6 +212,7 @@
     h("Réglages", "layout.default", [], "texte", "Disposition par défaut : fcose, cose, breadthfirst, grid, circle, concentric ou tree (défaut : fcose).", "  layout.default: tree"),
     h("Réglages", "tree.indent", [], "nombre (px)", "Indentation par niveau en disposition arbre (défaut : 28).", "  tree.indent: 28"),
     h("Réglages", "ui.sidePanel", [], "booléen", "Affiche le panneau latéral (défaut : true ; Vue > Panneau latéral, Ctrl+B).", "  ui.sidePanel: false"),
+    h("Réglages", "editor.searchBar", [], "booléen", "Affiche en permanence la barre de recherche de l’éditeur (défaut : false ; Vue > Barre de recherche de l’éditeur ; Ctrl+F l’ouvre dans tous les cas).", "  editor.searchBar: true"),
     h("Réglages", "ui.controls", [], "booléen", "Affiche la barre de contrôles et la palette d’outils du diagramme (défaut : true ; menu Contrôles).", "  ui.controls: false"),
     h("Réglages", "fullscreen.edgeReveal", [], "booléen", "Plein écran : le survol des bords (gauche : panneau, haut : bandeau) les fait apparaître en superposition (défaut : true).", "  fullscreen.edgeReveal: true"),
     h("Réglages", "meta.keys", [], "liste de textes", "Clés de métadonnées proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (défaut : owner, status, path, repo, version, environment, todo, doc).", "  meta.keys: [owner, status, repo]"),
@@ -232,7 +241,8 @@
     { keys: "Ctrl+Shift+S", description: "Enregistrer sous…" },
     { keys: "Ctrl+O", description: "Ouvrir un fichier" },
     { keys: "Alt+R", description: "Recharger depuis le disque (fichier ouvert avec accès direct ; en mode projet, relit toutes les briques) ; Ctrl+Z revient au texte d’avant" },
-    { keys: "Ctrl+F", description: "Rechercher un nœud" },
+    { keys: "Ctrl+F", description: "Dans l’éditeur : ouvrir la barre de recherche (Entrée / Maj+Entrée = suivant / précédent, Échap = fermer ; ids du modèle proposés)" },
+    { keys: "Double-clic sur un onglet, clic sur le nom de fichier", description: "Renommer le document (sans fichier : change le nom proposé ; avec fichier : « Enregistrer sous… » avec le nouveau nom, l’onglet suit)" },
     { keys: "Ctrl+Z", description: "Annuler la dernière action graphique" },
     { keys: "Ctrl+Y", description: "Rétablir (aussi Ctrl+Shift+Z)" },
     { keys: "Ctrl+Alt+1…9", description: "Appliquer la n-ième disposition nommée" },
@@ -240,11 +250,12 @@
     { keys: "Ctrl+W", description: "Fermer l’onglet (app installée ; sinon menu Fichier)" },
     { keys: "V / H / B / L / M", description: "Outil Sélection / Main / Brique / Lien / Déplacer dans…" },
     { keys: "Ctrl (outil Lien)", description: "Tenu pendant le tracé d’un lien : série de liens (comme la case « Liens multiples ») = brouillon dans le panneau « Série de liens » ; clic sur d’autres briques = liens depuis la même source ; « Créer n liens » les écrit d’un coup ; Échap / Annuler (avec confirmation) abandonne" },
+    { keys: "Ctrl+C (lien sélectionné)", description: "Copier le style du lien (aussi menu contextuel « Copier le style du lien ») : passe en mode Lien avec le préréglage {type, libellé, style} ; chaque lien créé ensuite (simple ou série) le reprend. ✕ dans l’en-tête ou Échap : retire le préréglage et revient à l’outil précédent" },
     { keys: "Clic droit (série de liens)", description: "Relâche la source armée ; le clic suivant sur une brique la choisit comme nouvelle source, le suivant crée la paire (un clic droit maintenu et déplacé déplace toujours la vue ; pas de menu contextuel pendant une série)" },
     { keys: "Espace (maintenu)", description: "Main temporaire (déplacer la vue)" },
     { keys: "Maj/Ctrl + clic", description: "Ajouter ou retirer une brique de la sélection" },
     { keys: "Suppr / Retour arrière", description: "Supprimer la sélection (vers la corbeille)" },
-    { keys: "Ctrl+C / Ctrl+X / Ctrl+V", description: "Copier / couper / coller les briques sélectionnées (YAML dans le presse-papiers ; collage dans la brique sélectionnée, sinon à la racine)" },
+    { keys: "Ctrl+C / Ctrl+X / Ctrl+V", description: "Copier / couper / coller les briques sélectionnées (avec uniquement des liens sélectionnés : copie le style du lien, voir ci-dessus ; YAML dans le presse-papiers ; collage dans la brique sélectionnée, sinon à la racine)" },
     { keys: "Ctrl+]  /  Ctrl+[", description: "Avancer / reculer la brique sélectionnée d’un plan" },
     { keys: "Ctrl+Maj+]  /  Ctrl+Maj+[", description: "Premier plan / arrière-plan" },
     { keys: "Ctrl+B", description: "Afficher / masquer le panneau latéral" },

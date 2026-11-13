@@ -114,6 +114,13 @@
         this.switchTo(row.dataset.id);
       }
     });
+    this.els.bar.addEventListener("dblclick", (event) => {
+      const row = event.target.closest(".doc-tab");
+
+      if (row && !event.target.closest(".doc-tab-close") && row.dataset.id === this.activeId) {
+        App.renameDocument();
+      }
+    });
     this.els.bar.addEventListener("auxclick", (event) => {
       const row = event.target.closest(".doc-tab");
 
@@ -347,7 +354,7 @@
       const dirty = live ? App.dirty : tab.dirty;
       const name = this.label(tab);
 
-      return `<div class="doc-tab${live ? " active" : ""}" role="tab" aria-selected="${live}" data-id="${escapeHtml(tab.id)}" title="${escapeHtml(name)}">
+      return `<div class="doc-tab${live ? " active" : ""}" role="tab" aria-selected="${live}" data-id="${escapeHtml(tab.id)}" title="${escapeHtml(name)}&#10;Double-clic : renommer">
         <span class="doc-tab-name">${escapeHtml(name)}</span>${dirty ? "<span class=\"doc-tab-dirty\" title=\"Modifications non enregistrées\">●</span>" : ""}${typeof FileWatch !== "undefined" ? FileWatch.staleMark(tab) : ""}
         <button type="button" class="doc-tab-close" title="Fermer l’onglet (Ctrl+W)" aria-label="Fermer l’onglet">✕</button>
       </div>`;

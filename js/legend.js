@@ -281,6 +281,15 @@ const Legend = {
       shape = `<ellipse cx="10" cy="8" rx="9" ry="6.5" ${paint}/>`;
     } else if (look.shape === "barrel") {
       shape = `<path d="M3 2 Q0 8 3 14 L17 14 Q20 8 17 2 Z" ${paint}/>`;
+    } else if (Shapes.isCustom(look.shape)) {
+      const list = Shapes.points(look.shape).split(" ").map(Number);
+      const pairs = [];
+
+      for (let i = 0; i < list.length; i += 2) {
+        pairs.push(`${(10 + list[i] * 9).toFixed(1)},${(8 + list[i + 1] * 7).toFixed(1)}`);
+      }
+
+      shape = `<polygon points="${pairs.join(" ")}" ${paint} stroke-linejoin="round"/>`;
     } else if (this.SHAPE_POINTS[look.shape]) {
       shape = `<polygon points="${this.SHAPE_POINTS[look.shape]}" ${paint} stroke-linejoin="round"/>`;
     } else {
@@ -288,6 +297,13 @@ const Legend = {
     }
 
     return `<svg class="lg-svg" viewBox="0 0 20 16" width="20" height="16" aria-hidden="true">${shape}</svg>`;
+  },
+
+  // Small icon shown next to a type / role that defines `icon` (empty string otherwise).
+  iconHtml(kind, value, model) {
+    const uri = typeof Icons !== "undefined" ? Icons.resolve(this.entry(kind, value, model).icon, getComputedStyle(document.body).color) : null;
+
+    return uri ? `<img class="lg-icon" alt="" src="${escapeHtml(uri)}" />` : "";
   },
 
   itemHtml(item, model) {
@@ -298,7 +314,7 @@ const Legend = {
 
     return `<span class="lg-item${active ? " active" : ""}${item.count ? "" : " unused"}">
       <button type="button" class="lg-sw" data-lg="filter" data-kind="${item.kind}" data-value="${value}" title="Filtrer sur ${item.kind === "type" ? "ce type" : "ce rôle"} (Maj+clic : cumuler)" aria-pressed="${active}">${this.swatch(this.look(item.kind, item.name, model))}</button>
-      <button type="button" class="lg-name" data-lg="edit" data-kind="${item.kind}" data-value="${value}" title="Éditer le style ${item.kind === "type" ? "du type" : "du rôle"}${styled ? " (défini dans le fichier)" : ""}">${value}${styled ? " ✎" : ""}</button>
+      <button type="button" class="lg-name" data-lg="edit" data-kind="${item.kind}" data-value="${value}" title="Éditer le style ${item.kind === "type" ? "du type" : "du rôle"}${styled ? " (défini dans le fichier)" : ""}">${this.iconHtml(item.kind, item.name, model)}${value}${styled ? " ✎" : ""}</button>
       ${item.count ? `<small class="lg-count">${item.count}</small>` : ""}</span>`;
   },
 
@@ -467,7 +483,7 @@ const Legend = {
 
     const options = { shape: Style.SHAPES, line: Style.LINK_LINES, arrow: Style.LINK_ARROWS, sourceArrow: Style.LINK_ARROWS }[field.key] || Style.BORDER_STYLES;
 
-    return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><select data-k="${field.key}"><option value="">(défaut)</option>${options.map((name) => `<option value="${name}" ${current === name ? "selected" : ""}>${name}</option>`).join("")}</select></span></div>`;
+    return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><select data-k="${field.key}"><option value="">(défaut)</option>${options.map((name) => `<option value="${name}" ${current === name ? "selected" : ""}>${field.key === "shape" && Shapes.isCustom(name) ? `${Shapes.label(name)} (${name})` : name}</option>`).join("")}</select></span></div>${field.key === "shape" ? `<div class="lg-field lg-shape-field">${Shapes.pickerHtml(current)}</div>` : ""}`;
   },
 
   // Opens the compact editor of a role / type style under (above) `anchor`.
@@ -494,6 +510,7 @@ const Legend = {
         <label><input type="checkbox" data-k="bold" ${entry.bold ? "checked" : ""} /> Gras</label>
         <label><input type="checkbox" data-k="italic" ${entry.italic ? "checked" : ""} /> Italique</label>
       </div>`}
+      ${isLink ? "" : `<div class="lg-field lg-icon-field"><span>Icône</span>${Icons.pickerHtml(entry.icon, entry.iconOpacity)}</div>`}
       <div class="lg-pop-actions"><button type="button" data-lg-reset="1" title="Supprime le style de ce ${label} du fichier">Défaut</button></div>`;
 
     document.body.appendChild(pop);
@@ -503,6 +520,19 @@ const Legend = {
     pop.addEventListener("input", (event) => this.onEditorInput(event));
     pop.addEventListener("change", (event) => this.onEditorChange(event));
     pop.addEventListener("click", (event) => this.onEditorClick(event));
+
+    if (!isLink) {
+      Icons.bind(pop, (patch) => {
+        const next = Object.assign({}, this.entry(kind, value, App.getModel()), patch);
+        const picker = pop.querySelector(".icon-picker");
+
+        this.setStyle(kind, value, patch);
+
+        if (picker && picker.isConnected) {
+          picker.outerHTML = Icons.pickerHtml(next.icon, next.iconOpacity);
+        }
+      });
+    }
     this.position(pop, anchor);
   },
 
@@ -620,7 +650,20 @@ const Legend = {
 
     const { kind, value } = this.popTarget;
 
-    if (button.dataset.lgClose) {
+    if (button.dataset.shapePick) {
+      const name = button.dataset.shapePick;
+      const select = this.pop.querySelector("select[data-k=\"shape\"]");
+
+      if (select) {
+        select.value = name;
+      }
+
+      this.pop.querySelectorAll("[data-shape-pick]").forEach((cell) => {
+        cell.classList.toggle("active", cell === button);
+        cell.setAttribute("aria-pressed", String(cell === button));
+      });
+      this.setStyle(kind, value, { shape: name });
+    } else if (button.dataset.lgClose) {
       this.closeEditor();
     } else if (button.dataset.lgReset) {
       this.resetStyle(kind, value);

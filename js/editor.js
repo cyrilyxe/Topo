@@ -32,8 +32,8 @@ const Editor = {
             cm.indentSelection("subtract");
           }
         },
-        "Ctrl-F": "findPersistent",
-        "Cmd-F": "findPersistent"
+        "Ctrl-F": () => EditorSearch.show(),
+        "Cmd-F": () => EditorSearch.show()
       }
     });
 

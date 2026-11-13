@@ -10,8 +10,8 @@ const StyleUI = {
   TYPE_KEYS: ["service", "database", "application", "external", "queue", "default"],
   TYPE_DEFAULTS: { service: "#2563eb", database: "#0f766e", application: "#7c3aed", external: "#6b7280", queue: "#c2410c", default: "#0369a1" },
   TYPE_LABELS: { service: "Service", database: "Base de données", application: "Application", external: "Externe", queue: "File", default: "Autre" },
-  BRUSH_KEYS: ["color", "border", "opacity", "size", "highlight", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape"],
-  PRESET_NODE_KEYS: ["color", "border", "opacity", "size", "highlight", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape"],
+  BRUSH_KEYS: ["color", "border", "opacity", "size", "highlight", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape", "icon", "iconOpacity"],
+  PRESET_NODE_KEYS: ["color", "border", "opacity", "size", "highlight", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape", "icon", "iconOpacity"],
   LINK_KEYS: ["color", "width", "line", "arrow", "sourceArrow", "textColor"],
   RECENT_LINKS_KEY: "topo:recent-link-styles",
   // Colour fields: input id -> where the value goes.
@@ -41,6 +41,7 @@ const StyleUI = {
     this.content.addEventListener("input", (event) => this.onInput(event));
     this.content.addEventListener("change", (event) => this.onInput(event));
     this.content.addEventListener("click", (event) => this.onClick(event));
+    Icons.bind(this.content, (patch) => this.apply(patch));
     this.content.addEventListener("dblclick", (event) => {
       if (event.target.closest("button[data-act=\"brush\"]")) {
         this.startPainter(true);
@@ -111,6 +112,8 @@ const StyleUI = {
       this.deleteRule(this.targets);
     } else if (act === "clear") {
       this.apply({ [prop]: null });
+    } else if (act === "shape-pick") {
+      this.apply({ shape: button.dataset.shapePick });
     } else if (act === "swatch") {
       this.pushRecent(color);
       this.apply({ [prop]: color });
@@ -485,6 +488,9 @@ const StyleUI = {
       textFrom: rule.textColor !== undefined ? "règle" : (this.levelFrom(node, "textColor") || "auto (contraste)"),
       shape: (node && node.data("rule") && node.data("rule").shape) || "round-rectangle",
       shapeFrom: rule.shape !== undefined ? "règle" : (this.levelFrom(node, "shape") || (node && node.isParent() ? "groupe déplié : rectangle" : "défaut")),
+      icon: (node && node.data("rule") && node.data("rule").icon) || "",
+      iconFrom: rule.icon !== undefined ? "règle" : (this.levelFrom(node, "icon") || "aucune"),
+      iconOpacity: node && node.data("rule") && node.data("rule").iconOpacity !== undefined ? node.data("rule").iconOpacity : "",
       textBg: rule.textBackground || "",
       borderStyle: rule.borderStyle || (node ? read("border-style") : "") || "solid",
       borderWidth: rule.borderWidth !== undefined ? Number(rule.borderWidth) : (node ? Number(read("border-width")) || 0 : 2)
@@ -576,6 +582,9 @@ const StyleUI = {
     const brushActive = this.painter ? " active" : "";
     const shape = this.merged(items, "shape");
     const shapeFrom = this.mixedOr(this.merged(items, "shapeFrom"), first.shapeFrom);
+    const icon = this.merged(items, "icon");
+    const iconFrom = this.mixedOr(this.merged(items, "iconFrom"), first.iconFrom);
+    const iconOpacity = this.merged(items, "iconOpacity");
 
     return `
       <div class="style-target">
@@ -610,13 +619,18 @@ const StyleUI = {
         <div class="style-field">
           <span>Forme <small class="prov">${escapeHtml(shapeFrom)}</small></span>
           <span class="style-row">
-            <select id="style-shape">${Style.SHAPES.map((name) => `<option value="${name}" ${!shape.mixed && shape.value === name ? "selected" : ""}>${name}</option>`).join("")}${shape.mixed ? "<option value=\"\" selected>valeurs mixtes</option>" : ""}</select>
+            <select id="style-shape">${Style.SHAPES.map((name) => `<option value="${name}" ${!shape.mixed && shape.value === name ? "selected" : ""}>${Shapes.isCustom(name) ? `${Shapes.label(name)} (${name})` : name}</option>`).join("")}${shape.mixed ? "<option value=\"\" selected>valeurs mixtes</option>" : ""}</select>
             <button type="button" data-act="clear" data-prop="shape" title="Revenir à la valeur héritée">⟲</button>
           </span>
+          ${Shapes.pickerHtml(shape.mixed ? "" : shape.value, "data-act=\"shape-pick\"")}
         </div>
         <label>Épaisseur de bordure : <span id="style-border-width-value">${borderWidth.mixed ? "valeurs mixtes" : `${borderWidth.value} px`}</span>
           <input id="style-border-width" type="range" min="0" max="8" step="1" value="${borderWidth.value}" />
         </label>
+        <div class="style-field">
+          <span>Icône <small class="prov">${escapeHtml(iconFrom)}</small></span>
+          ${Icons.pickerHtml(icon.mixed ? "" : icon.value, iconOpacity.mixed ? "" : iconOpacity.value)}
+        </div>
         <div class="style-field">
           <span>Couleur du texte <small class="prov">${escapeHtml(textFrom)}</small></span>
           ${this.colorField("style-text", text.value, "clear", "textColor")}

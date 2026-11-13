@@ -42,6 +42,8 @@ const Inspector = {
     this.content.addEventListener("change", (event) => {
       if (event.target.dataset && event.target.dataset.card) {
         this.onCardChange(event.target);
+      } else if (event.target.dataset && event.target.dataset.linkSide) {
+        this.actions["link-side"]?.(Number(event.target.dataset.linkIndex), event.target.dataset.linkSide, event.target.value);
       }
     });
 
@@ -483,6 +485,8 @@ const Inspector = {
           <li>Origine : ${this.nodeButton(source.id, model)}</li>
           <li>Cible : ${this.nodeButton(target.id, model)}</li>
           <li>Étiquette : ${link.label ? escapeHtml(link.label) : "<span class=\"empty\">aucune</span>"}</li>
+          ${model.links.indexOf(link) >= 0 ? `<li><label>Ancrage départ : ${Forms.sideSelect("fromSide", link.fromSide).replace("<select ", `<select data-link-side="fromSide" data-link-index="${model.links.indexOf(link)}" `)}</label></li>
+          <li><label>Ancrage arrivée : ${Forms.sideSelect("toSide", link.toSide).replace("<select ", `<select data-link-side="toSide" data-link-index="${model.links.indexOf(link)}" `)}</label></li>` : ""}
         </ul>
       </section>
 

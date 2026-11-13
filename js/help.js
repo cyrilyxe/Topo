@@ -90,6 +90,15 @@ const Help = {
       </ul>`;
   },
 
+  buildExport() {
+    return `
+      <h3>Export</h3>
+      <ul>
+        <li><strong>Exporter</strong> : une entrée par format — Image SVG / PNG / JPG, <strong>draw.io</strong> (fichier <code>.drawio</code> à ouvrir dans diagrams.net : positions, tailles, couleurs, groupes en conteneurs, liens), <strong>Mermaid</strong> (<code>.mmd</code>, flowchart), <strong>PlantUML</strong> (<code>.puml</code>, diagramme de composants) et JSON. Les groupes repliés sont exportés comme une brique simple. Le fichier porte le nom du document ouvert.</li>
+        <li><strong>Aperçu…</strong> : fenêtre avec sélecteur de format (mémorisé). Image : aperçu graphique ; texte : code défilant et bouton « Copier ». Rafraîchir, rafraîchissement auto, « Exporter » télécharge le format affiché.</li>
+      </ul>`;
+  },
+
   build() {
     const schema = typeof Schema !== "undefined" ? Schema : null;
     let html = "";
@@ -130,6 +139,7 @@ const Help = {
     }
 
     html += this.buildEditing();
+    html += this.buildExport();
     html += "<h3>Raccourcis clavier</h3>";
 
     if (schema && Array.isArray(schema.SHORTCUTS)) {

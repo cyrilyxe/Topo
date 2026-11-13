@@ -75,16 +75,19 @@ const Graph = {
   },
 
   // Anchor of a node side, in model coordinates.
-  sideAnchor(node, side) {
+  // `shift`: fraction of the side length along the side (0 = middle).
+  sideAnchor(node, side, shift = 0) {
     const p = node.position();
     const w = node.outerWidth() / 2;
     const h = node.outerHeight() / 2;
+    const dx = shift * 2 * w;
+    const dy = shift * 2 * h;
 
-    return { right: { x: p.x + w, y: p.y }, left: { x: p.x - w, y: p.y }, bottom: { x: p.x, y: p.y + h }, top: { x: p.x, y: p.y - h } }[side];
+    return { right: { x: p.x + w, y: p.y + dy }, left: { x: p.x - w, y: p.y + dy }, bottom: { x: p.x + dx, y: p.y + h }, top: { x: p.x + dx, y: p.y - h } }[side];
   },
 
   // Per-edge geometry: leave and enter by `side`, going round the outside of the boxes.
-  edgeGeometry(edge, mode, side) {
+  edgeGeometry(edge, mode, side, shift = {}) {
     const source = edge.source();
     const target = edge.target();
 
@@ -103,14 +106,13 @@ const Graph = {
         : null;
     }
 
-    const a = this.sideAnchor(source, side);
-    const b = this.sideAnchor(target, side);
-    const info = this.SIDES[side];
+    const a = this.sideAnchor(source, side, shift.source || 0);
+    const b = this.sideAnchor(target, side, shift.target || 0);
     const horizontal = side === "right" || side === "left";
     const sign = side === "right" || side === "bottom" ? 1 : -1;
     const axis = horizontal ? "x" : "y";
     const turn = sign > 0 ? Math.max(a[axis], b[axis]) + this.SIDE_OFFSET : Math.min(a[axis], b[axis]) - this.SIDE_OFFSET;
-    const css = { "source-endpoint": info.endpoint, "target-endpoint": info.endpoint, "edge-distances": "node-position" };
+    const css = { "source-endpoint": Model.sideEndpoint(side, shift.source), "target-endpoint": Model.sideEndpoint(side, shift.target), "edge-distances": "node-position" };
     const control = (point) => (horizontal ? { x: turn, y: point.y } : { x: point.x, y: turn });
     const vx = tp.x - sp.x;
     const vy = tp.y - sp.y;
@@ -147,18 +149,165 @@ const Graph = {
     }
 
     const { mode, side } = this.edgeMode();
+    const plan = this.endpointPlan(side);
     const custom = side !== "auto" || mode === "curved";
 
     this.cy.batch(() => {
       this.cy.edges().forEach((edge) => {
         edge.removeStyle(this.EDGE_KEYS.join(" "));
 
-        const css = custom ? this.edgeGeometry(edge, mode, side) : null;
+        const spec = plan.get(edge.id());
+        const shift = spec ? { source: spec.sourceImplicit ? spec.sourceShift : 0, target: spec.targetImplicit ? spec.targetShift : 0 } : {};
+        const css = custom ? this.edgeGeometry(edge, mode, side, shift) : null;
+        const out = Object.assign({}, css);
 
-        if (css) {
-          edge.style(css);
+        if (spec && spec.sourceSide && !spec.sourceImplicit) {
+          out["source-endpoint"] = Model.sideEndpoint(spec.sourceSide, spec.sourceShift);
+        }
+
+        if (spec && spec.targetSide && !spec.targetImplicit) {
+          out["target-endpoint"] = Model.sideEndpoint(spec.targetSide, spec.targetShift);
+        }
+
+        if (Object.keys(out).length) {
+          edge.style(out);
         }
       });
+    });
+  },
+
+  // Per-edge end anchors: explicit (data fromSide / toSide) or implied by the global edge side. Ends sharing the
+  // same side of the same brick are spread along that side, ordered by the position of the other brick, so that
+  // no two links aim at exactly the same point. The implied (global side) case is left alone in the outline layout.
+  // Returns Map(edgeId -> { sourceSide, targetSide, sourceShift, targetShift, sourceImplicit, targetImplicit }).
+  endpointPlan(globalSide) {
+    const plan = new Map();
+    const groups = new Map();
+    const spreadImplicit = globalSide !== "auto" && this.layoutName !== "tree";
+
+    this.cy.edges().forEach((edge) => {
+      if (edge.source().id() === edge.target().id()) {
+        return;
+      }
+
+      const own = { source: Model.normalizeSide(edge.data("fromSide")), target: Model.normalizeSide(edge.data("toSide")) };
+      const spec = { sourceSide: own.source, targetSide: own.target, sourceShift: 0, targetShift: 0, sourceImplicit: false, targetImplicit: false };
+
+      [["source", edge.source(), edge.target()], ["target", edge.target(), edge.source()]].forEach(([end, node, other]) => {
+        const implicit = !own[end] && spreadImplicit;
+        const sideName = own[end] || (implicit ? globalSide : "");
+
+        if (!sideName) {
+          return;
+        }
+
+        spec[`${end}Side`] = sideName;
+        spec[`${end}Implicit`] = implicit;
+
+        const key = `${node.id()}|${sideName}`;
+        const list = groups.get(key) || [];
+        const p = other.position();
+
+        list.push({ spec, end, order: sideName === "top" || sideName === "bottom" ? p.x : p.y, id: edge.id() });
+        groups.set(key, list);
+      });
+
+      plan.set(edge.id(), spec);
+    });
+
+    groups.forEach((list) => {
+      if (list.length < 2) {
+        return;
+      }
+
+      const offsets = Model.spreadOffsets(list.length);
+
+      list.sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1)).forEach((item, i) => {
+        item.spec[`${item.end}Shift`] = offsets[i];
+      });
+    });
+
+    if (globalSide === "auto") {
+      this.separateAutoEnds(plan);
+    }
+
+    return plan;
+  },
+
+  AUTO_GAP: 12,
+
+  // Automatic ends (no anchor, no global side) aim at the centre of the brick: several links coming from the same
+  // direction would meet at one point. Ends that land within AUTO_GAP of each other on a side are given an explicit
+  // endpoint on that side, spread around where they met.
+  separateAutoEnds(plan) {
+    const nodes = new Map();
+
+    this.cy.edges().forEach((edge) => {
+      const spec = plan.get(edge.id());
+
+      if (edge.source().id() === edge.target().id()) {
+        return;
+      }
+
+      [["source", edge.source(), edge.target()], ["target", edge.target(), edge.source()]].forEach(([end, node, other]) => {
+        if (spec && spec[`${end}Side`]) {
+          return;
+        }
+
+        const p = node.position();
+        const q = other.position();
+        const dx = q.x - p.x;
+        const dy = q.y - p.y;
+        const w = node.outerWidth() / 2;
+        const h = node.outerHeight() / 2;
+
+        if (!w || !h || (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6)) {
+          return;
+        }
+
+        const horizontal = Math.abs(dx) * h >= Math.abs(dy) * w;
+        const t = horizontal ? w / Math.abs(dx) : h / Math.abs(dy);
+        const sideName = horizontal ? (dx > 0 ? "right" : "left") : (dy > 0 ? "bottom" : "top");
+        const along = horizontal ? dy * t : dx * t;
+        const length = horizontal ? 2 * h : 2 * w;
+        const key = `${node.id()}|${sideName}`;
+        const list = nodes.get(key) || [];
+
+        list.push({ edge, end, sideName, along, length });
+        nodes.set(key, list);
+      });
+    });
+
+    nodes.forEach((list) => {
+      list.sort((a, b) => a.along - b.along || (a.edge.id() < b.edge.id() ? -1 : 1));
+
+      let cluster = [];
+      const flush = () => {
+        if (cluster.length > 1) {
+          const mean = cluster.reduce((sum, item) => sum + item.along, 0) / cluster.length;
+          const offsets = Model.spreadOffsets(cluster.length);
+
+          cluster.forEach((item, i) => {
+            const shift = Math.max(-0.4, Math.min(0.4, mean / item.length + offsets[i]));
+            const spec = plan.get(item.edge.id()) || { sourceSide: "", targetSide: "", sourceShift: 0, targetShift: 0, sourceImplicit: false, targetImplicit: false };
+
+            spec[`${item.end}Side`] = item.sideName;
+            spec[`${item.end}Shift`] = shift;
+            plan.set(item.edge.id(), spec);
+          });
+        }
+
+        cluster = [];
+      };
+
+      list.forEach((item) => {
+        if (cluster.length && item.along - cluster[cluster.length - 1].along > this.AUTO_GAP) {
+          flush();
+        }
+
+        cluster.push(item);
+      });
+      flush();
     });
   },
 
@@ -367,7 +516,7 @@ const Graph = {
       { selector: "node.collapsed[ruleColor]", style: { "background-opacity": 1 } },
       { selector: "node[ruleOpacity >= 0]", style: { opacity: "data(ruleOpacity)" } },
       { selector: "node[ruleBorderStyle]", style: { "border-style": "data(ruleBorderStyle)" } },
-      { selector: "node[ruleShape]", style: { shape: "data(ruleShape)" } },
+      ...Style.SHAPES.map((name) => ({ selector: `node[ruleShape = "${name}"]`, style: Shapes.cytoscapeStyle(name) })),
       { selector: "node[ruleBorderWidth >= 0]", style: { "border-width": "data(ruleBorderWidth)" } },
       { selector: "node[autoText]", style: { color: "data(autoText)" } },
       { selector: "node[ruleText]", style: { color: "data(ruleText)" } },
@@ -1083,6 +1232,52 @@ const Graph = {
       });
 
       this.applyTextContrast(tok);
+      this.applyIcons();
+    });
+  },
+
+  // Brick icon (style `icon` / `iconOpacity`): left of the label on leaves and collapsed groups
+  // (the label is shifted right so it stays readable), faint full-size watermark on expanded groups.
+  applyIcons() {
+    if (typeof Icons === "undefined") {
+      return;
+    }
+
+    const scale = Style.scale();
+
+    this.cy.nodes().not(".meta-card").forEach((node) => {
+      const rule = node.data("rule") || {};
+      const uri = Icons.resolve(rule.icon, node.data("autoText"));
+
+      if (!uri) {
+        return;
+      }
+
+      const size = scale * (Number(rule.size) || 1);
+      const opacity = rule.iconOpacity;
+      const styles = { "background-image": uri, "background-repeat": "no-repeat", "background-image-opacity": opacity !== undefined ? opacity : 1 };
+
+      if (node.isParent()) {
+        Object.assign(styles, { "background-fit": "contain", "background-position-x": "50%", "background-position-y": "50%", "background-image-opacity": opacity !== undefined ? opacity : 0.12 });
+      } else {
+        const collapsed = node.hasClass("collapsed");
+        const box = (collapsed ? 56 : 42) * size;
+        const px = Math.round(box * (collapsed ? 0.7 : 0.6));
+        // Custom polygons leave a free margin on the left (cloud lobes, chevron notch...).
+        const extra = Math.round(Shapes.inset(rule.shape) * (collapsed ? 210 : 170) * size);
+
+        Object.assign(styles, {
+          "background-fit": "none",
+          "background-width": px,
+          "background-height": px,
+          "background-position-x": Math.round(10 * size) + extra,
+          "background-position-y": "50%",
+          "text-margin-x": Math.round((px + 6 + extra) / 2),
+          "text-max-width": Math.max(60, (collapsed ? 190 : 150) * size - px - 6 - extra)
+        });
+      }
+
+      node.style(styles);
     });
   },
 

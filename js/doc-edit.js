@@ -570,7 +570,7 @@
   }
 
   // Adds several links at once. pairs: [{ from, to }] (duplicates ignored); common: { type, label, style }.
-  // With a type, a non-empty style is merged into style.links[type]; without type it goes on each link.
+  // With a type, a non-empty style is merged into style.links[type]; without type (or with common.perLink) it goes on each link.
   function addLinks(text, pairs, common) {
     const c = common || {};
     const style = isPlain(c.style) && Object.keys(c.style).length ? c.style : null;
@@ -583,10 +583,10 @@
       const link = { from: p.from, to: p.to };
       if (c.label) link.label = c.label;
       if (c.type) link.type = c.type;
-      if (style && !c.type) link.style = style;
+      if (style && (!c.type || c.perLink)) link.style = style;
       next = addLink(next, link);
     });
-    if (style && c.type) {
+    if (style && c.type && !c.perLink) {
       const model = Model.parse(next);
       const old = model.style || {};
       const block = {};

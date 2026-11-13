@@ -6,6 +6,14 @@ const ViewUi = {
   sideTimer: null,
   topTimer: null,
   altPinned: false,
+  MENU_TITLES: {
+    tool: "Choisit l’outil actif du diagramme (sélection, main, brique, lien…).",
+    layout: "Applique cette disposition au diagramme.",
+    replay: "Rejoue la disposition courante.",
+    fit: "Ajuste le zoom pour voir tout le diagramme.",
+    collapse: "Replie tous les groupes.",
+    expand: "Déplie tous les groupes."
+  },
 
   get fullscreen() {
     return document.body.classList.contains("diagram-fullscreen");
@@ -239,7 +247,10 @@ const ViewUi = {
     } else if (event.key === "Escape" && this.fullscreen && !this.dialogOpen()) {
       const dragging = typeof Tools !== "undefined" && (Tools.moveDrag || Tools.linkDrag);
 
-      if (dragging || this.els.header.querySelector(".dropdown-panel:not([hidden])")) {
+      // Escape inside a field (e.g. the editor search bar) belongs to that field, not to fullscreen.
+      const inField = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable], .CodeMirror");
+
+      if (dragging || inField || this.els.header.querySelector(".dropdown-panel:not([hidden])")) {
         return;
       }
 
@@ -287,6 +298,12 @@ const ViewUi = {
 
       button.type = "button";
       button.dataset.act = act;
+
+      const hint = options.title || this.MENU_TITLES[act];
+
+      if (hint) {
+        button.title = hint;
+      }
 
       if (value !== undefined) {
         button.dataset.value = value;
