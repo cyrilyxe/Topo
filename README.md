@@ -27,7 +27,7 @@ Aucun build, aucun backend. Les bibliothèques (js-yaml, Cytoscape, cytoscape-sv
 - Fichiers : Nouveau, Ouvrir, Enregistrer (Ctrl+S), Enregistrer sous (Ctrl+Maj+S), import JSON ; Recharger depuis le disque (Alt+R, annulable par Ctrl+Z) et détection d’un fichier modifié par un autre programme (bandeau Recharger / Ignorer, marqueur ⟳ dans l’onglet, confirmation avant d’écraser ; réglages `files.watch` et `files.autoReload`) ; premier enregistrement : nom proposé d’après le `title` du YAML (`architecture-exemple.yaml`) ; renommer par double-clic sur l’onglet ou clic sur le nom de fichier (avec fichier lié : « Enregistrer sous… », l’onglet suit le nouveau fichier) ; « Ouvrir le fichier enregistré » recharge depuis le disque.
 - Éditeur : barre de recherche au-dessus du YAML (Ctrl+F, ou permanente via Vue > Barre de recherche de l’éditeur, réglage `editor.searchBar`) : compteur n / total, suivant / précédent (Entrée / Maj+Entrée), casse, regex, surlignage, ids du modèle proposés ; les menus du bandeau s’ouvrent au survol quand l’un d’eux est déjà ouvert.
 - Persistance de la vue (repli, zoom, déplacement, disposition, positions) dans `localStorage` par document, et dans le bloc `view:` du fichier à l’enregistrement (option du menu Vue).
-- Exports : SVG, PNG, JSON, Mermaid.
+- Exports (registre extensible `js/exporters.js`) : SVG, PNG, JPG, draw.io, Mermaid, PlantUML, JSON ; fenêtre « Aperçu… » avec choix du format et bouton Copier.
 - Affichage : panneau latéral (Ctrl+B) et contrôles du diagramme masquables (menu Vue), menu Contrôles (outils, dispositions, ajuster, replier/déplier), plein écran du diagramme (Ctrl+Maj+F, Échap pour quitter ; en plein écran, le bord gauche révèle le panneau, le bord haut ou Alt le bandeau).
 - Aide (`?` ou F1) générée depuis le schéma, thème clair / sombre.
 
@@ -69,11 +69,15 @@ Le format des fichiers `brick.yaml` est décrit dans `docs/SPEC.md` (§5-6).
 
 Menu **Projet ▸ Ouvrir un dossier de briques…** (Chrome/Edge via `node tools/topo.js serve`, accès lecture/écriture). Le dossier est fusionné en un diagramme ; l’onglet **Projet** liste les briques et les anomalies de fusion, avec correctifs « Remplacer par … » écrits dans les petits fichiers. Les changements de fichiers sont détectés (bannière « Reconstruire »). « Éditer la source » (menu d’un nœud ou inspecteur) ouvre le petit YAML ; l’enregistrer reconstruit le fusionné. Ctrl+S sur le fusionné écrit `architecture.yaml` mais ne remonte pas dans les briques. Sans File System Access API (Firefox, Safari), le dossier est lu en lecture seule et correctifs/enregistrements sont téléchargés.
 
-## Déploiement autonome
+## Déploiement autonome (hors ligne / airgap)
 
-`node tools/topo.js package` télécharge les libs CDN dans `vendor/` (une fois) puis produit `dist/topo-<version>.zip` et `.tar.gz` : `index.html` (URLs réécrites en relatif), `styles.css`, `js/`, `tools/`, `vendor/`, `docs/`, `examples/`, `README.md`, `package.json`. Aucun `npm install`, CDN ni accès internet requis.
+Le dépôt est déjà autonome : toutes les librairies sont dans `vendor/` et `index.html` les charge en relatif. Aucun outil, téléchargement, `npm install` ni accès internet n'est nécessaire.
 
-Trois façons de servir après extraction :
+- **Le plus simple** : clone ou copie le dossier (ou archive-le en zip et extrais-le ailleurs), puis ouvre `index.html`.
+- **Archive allégée (facultatif)** : `node tools/topo.js package` produit `dist/topo-<version>.zip` et `.tar.gz` sans `.git`, tests ni fichiers de travail : `index.html`, `styles.css`, `js/`, `tools/`, `vendor/`, `docs/`, `examples/`, `README.md`, `package.json`.
+- `node tools/topo.js vendor --force` (avec internet) sert seulement à re-télécharger les librairies dans `vendor/` après un changement de version.
+
+Trois façons de servir :
 1. ouvrir `index.html` en `file://` ;
 2. `node tools/topo.js serve` (Node ≥ 18, sans `node_modules`) ;
 3. n'importe quel serveur statique, ex. nginx : `root /srv/topo; index index.html;`

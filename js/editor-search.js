@@ -256,6 +256,8 @@ const EditorSearch = {
       this.anchor = match.from;
 
       if (scroll) {
+        // Move the editor selection too (focus stays in the search field), so the match is selected and the graph follows.
+        this.cm.setSelection(match.from, match.to, { scroll: false });
         this.cm.scrollIntoView({ from: match.from, to: match.to }, 80);
       }
     }

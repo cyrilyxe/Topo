@@ -781,7 +781,12 @@ body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }
 .export-preview-win .ep-view.fit .ep-img { max-width: 100%; max-height: 100%; }
 .export-preview-win .ep-view:not(.fit) .ep-img { display: block; max-width: none; }
 .export-preview-win .ep-empty { margin: 16px; color: var(--text-muted); }
-.export-preview-win .ep-status { padding: 3px 12px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); }
+.export-preview-win .ep-status { padding: 3px 12px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); }
+.export-preview-win .ep-view.text { background: var(--surface); }
+.export-preview-win .ep-text { margin: 0; padding: 10px 12px; font: 12px/1.45 var(--mono); white-space: pre; user-select: text; min-height: 100%; box-sizing: border-box; }
+.export-preview-win .ep-note { padding: 4px 12px; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.export-preview-win .ep-note[hidden] { display: none; }
+.export-preview-win [hidden] { display: none !important; }
 .icon-picker { display: grid; gap: 6px; }
 .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 4px; }
 .icon-cell { width: 34px; height: 34px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }

@@ -1386,7 +1386,8 @@ const App = {
           return;
         }
 
-        Files.current = { name: this.name, handle: Files.current.handle };
+        // Without a file yet, Files.save falls back to "save as" with the name proposed from the title.
+        Files.current = { name: this.name || this.suggestedName(), handle: Files.current.handle };
         result = await Files.save(text);
       }
 
@@ -1440,22 +1441,11 @@ const App = {
       return;
     }
 
-    const base = this.slug();
+    const format = Exporters.get(kind);
 
     try {
-      if (kind === "svg") {
-        Files.download(Graph.exportSvg(), `${base}.svg`, "image/svg+xml");
-      } else if (kind === "png") {
-        Files.download(Graph.exportPng(), `${base}.png`, "image/png");
-      } else if (kind === "json") {
-        const json = JSON.stringify(this.model, (key, value) => (value instanceof Map ? undefined : value), 2);
-
-        Files.download(json, `${base}.json`, "application/json");
-      } else if (kind === "mermaid") {
-        Files.download(Model.toMermaid(this.model), `${base}.mmd`, "text/plain");
-      }
-
-      this.showMessage(`Export ${kind.toUpperCase()} téléchargé.`, "success");
+      Files.download(format.build(Exporters.context()), `${this.slug()}.${format.ext}`, format.mime);
+      this.showMessage(`Export ${format.label} téléchargé.`, "success");
     } catch (error) {
       this.showMessage(`Export impossible : ${error.message}`, "error");
     }
@@ -1479,11 +1469,8 @@ const App = {
           this.loadText(Model.DEFAULT_YAML, { name: null, dirty: false });
         }
       },
-      "export-svg": () => this.exportAs("svg"),
       "export-preview": () => ExportPreview.open(),
-      "export-png": () => this.exportAs("png"),
-      "export-json": () => this.exportAs("json"),
-      "export-mermaid": () => this.exportAs("mermaid"),
+      ...Object.fromEntries(Exporters.list().map((format) => [`export-${format.id}`, () => this.exportAs(format.id)])),
       "apply": () => this.applyNow(true),
       "undo": () => this.undo(),
       "redo": () => this.redo(),
@@ -1582,6 +1569,19 @@ const App = {
 
   bindUi() {
     const commands = this.commands();
+    const exportMenu = document.querySelector("[data-cmd=export-preview]");
+
+    // One menu entry per registered export format (after « Aperçu… »).
+    Exporters.list().slice().reverse().forEach((format) => {
+      const item = document.createElement("button");
+
+      item.type = "button";
+      item.setAttribute("role", "menuitem");
+      item.dataset.cmd = `export-${format.id}`;
+      item.title = format.title || `Télécharge le diagramme au format ${format.label}.`;
+      item.textContent = format.label;
+      exportMenu.insertAdjacentElement("afterend", item);
+    });
 
     document.querySelectorAll(".dropdown-toggle").forEach((toggle) => {
       // With a menu open, hovering another menu button switches to it (like a classic menu bar).

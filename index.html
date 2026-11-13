@@ -19,28 +19,28 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='4' width='12' height='9' rx='2' fill='%232563eb'/%3E%3Crect x='18' y='19' width='12' height='9' rx='2' fill='%2316a34a'/%3E%3Cpath d='M8 13v10h10' fill='none' stroke='%2364748b' stroke-width='2.5'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="styles.css" />
 
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css" />
+  <link rel="stylesheet" href="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css" />
+  <link rel="stylesheet" href="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.css" />
+  <link rel="stylesheet" href="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css" />
 
-  <script src="https://unpkg.com/js-yaml@4.1.1/dist/js-yaml.min.js"></script>
-  <script src="https://unpkg.com/cytoscape@3.34.4/dist/cytoscape.min.js"></script>
-  <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
-  <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
-  <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/cytoscape-svg@0.4.0/cytoscape-svg.min.js"></script>
+  <script src="vendor/unpkg.com/js-yaml@4.1.1/dist/js-yaml.min.js"></script>
+  <script src="vendor/unpkg.com/cytoscape@3.34.4/dist/cytoscape.min.js"></script>
+  <script src="vendor/unpkg.com/layout-base@2.0.1/layout-base.js"></script>
+  <script src="vendor/unpkg.com/cose-base@2.2.0/cose-base.js"></script>
+  <script src="vendor/unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+  <script src="vendor/cdn.jsdelivr.net/npm/cytoscape-svg@0.4.0/cytoscape-svg.min.js"></script>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/indent-fold.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/scroll/annotatescrollbar.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/indent-fold.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/scroll/annotatescrollbar.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.js"></script>
+  <script src="vendor/cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
 </head>
 
 <body>
@@ -78,11 +78,7 @@
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Exporter ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
-          <button type="button" role="menuitem" data-cmd="export-preview" title="Affiche le SVG tel qu’il serait exporté, avec rafraîchissement optionnel.">Aperçu…</button>
-          <button type="button" role="menuitem" data-cmd="export-svg" title="Télécharge le diagramme en image vectorielle (SVG).">Image SVG</button>
-          <button type="button" role="menuitem" data-cmd="export-png" title="Télécharge le diagramme en image PNG.">Image PNG</button>
-          <button type="button" role="menuitem" data-cmd="export-json" title="Télécharge le modèle (nœuds et liens) au format JSON.">JSON</button>
-          <button type="button" role="menuitem" data-cmd="export-mermaid" title="Télécharge le diagramme en texte Mermaid.">Mermaid</button>
+          <button type="button" role="menuitem" data-cmd="export-preview" title="Affiche l’export dans le format choisi (SVG, PNG, draw.io, Mermaid, PlantUML, JSON…), avec rafraîchissement optionnel.">Aperçu…</button>
         </div>
       </div>
 
@@ -312,6 +308,7 @@
   <script src="js/anomalies.js"></script>
   <script src="js/help.js"></script>
   <script src="js/forms.js"></script>
+  <script src="js/exporters.js"></script>
   <script src="js/export-preview.js"></script>
   <script src="js/trash.js"></script>
   <script src="js/link-series.js"></script>
