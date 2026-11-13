@@ -16,6 +16,7 @@
     })();
   </script>
 
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='4' width='12' height='9' rx='2' fill='%232563eb'/%3E%3Crect x='18' y='19' width='12' height='9' rx='2' fill='%2316a34a'/%3E%3Cpath d='M8 13v10h10' fill='none' stroke='%2364748b' stroke-width='2.5'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="styles.css" />
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
@@ -63,6 +64,7 @@
           <button type="button" role="menuitem" data-cmd="open">Ouvrir…<kbd>Ctrl+O</kbd></button>
           <button type="button" role="menuitem" data-cmd="save">Enregistrer<kbd>Ctrl+S</kbd></button>
           <button type="button" role="menuitem" data-cmd="save-as">Enregistrer sous…<kbd>Ctrl+Maj+S</kbd></button>
+          <button type="button" role="menuitem" data-cmd="reload" id="menu-reload">Recharger depuis le disque<kbd>Alt+R</kbd></button>
           <button type="button" role="menuitem" data-cmd="close-tab">Fermer l’onglet<kbd>Ctrl+W</kbd></button>
           <button type="button" role="menuitem" data-cmd="next-tab">Onglet suivant<kbd>Ctrl+Tab</kbd></button>
           <button type="button" role="menuitem" data-cmd="prev-tab">Onglet précédent<kbd>Ctrl+Maj+Tab</kbd></button>
@@ -90,10 +92,25 @@
       </div>
 
       <div class="dropdown">
+        <button type="button" id="controls-toggle" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Contrôles ▾</button>
+        <div id="controls-menu" class="dropdown-panel" role="menu" hidden></div>
+      </div>
+
+      <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Vue ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
           <button type="button" role="menuitem" data-cmd="undo" id="menu-undo" disabled>Annuler<kbd>Ctrl+Z</kbd></button>
           <button type="button" role="menuitem" data-cmd="redo" id="menu-redo" disabled>Rétablir<kbd>Ctrl+Y</kbd></button>
+          <hr />
+          <label class="menu-check">
+            <input id="opt-side-panel" type="checkbox" checked />
+            Panneau latéral<kbd>Ctrl+B</kbd>
+          </label>
+          <label class="menu-check">
+            <input id="opt-controls" type="checkbox" checked />
+            Contrôles du diagramme
+          </label>
+          <button type="button" role="menuitem" data-cmd="fullscreen">Plein écran<kbd>Ctrl+Maj+F</kbd></button>
           <hr />
           <label class="menu-check">
             <input id="opt-save-view" type="checkbox" checked />
@@ -187,6 +204,7 @@
 
         <button id="btn-zoom-in" type="button" class="icon-btn" title="Zoom avant" aria-label="Zoom avant">＋</button>
         <button id="btn-zoom-out" type="button" class="icon-btn" title="Zoom arrière" aria-label="Zoom arrière">－</button>
+        <button id="btn-fullscreen" type="button" class="icon-btn" title="Plein écran (Ctrl+Maj+F)" aria-label="Plein écran">⛶</button>
         <button id="btn-fit" type="button">Ajuster</button>
         <button id="btn-collapse-all" type="button">Tout replier</button>
         <button id="btn-expand-all" type="button">Tout déplier</button>
@@ -210,6 +228,7 @@
 
       <div class="graph-wrap">
         <div id="cy"></div>
+        <div id="file-banner" class="file-banner" role="status" hidden></div>
         <div id="meta-card" class="meta-card" hidden></div>
         <div id="tools-bar" class="tools-bar" role="toolbar" aria-label="Outils d’édition" aria-orientation="vertical"></div>
         <div id="tools-help" class="tools-help" aria-live="polite"></div>
@@ -236,6 +255,9 @@
   </main>
 
   <div id="context-menu" class="context-menu" hidden></div>
+  <button id="side-reveal" type="button" class="side-reveal" title="Afficher le panneau latéral (Ctrl+B)" aria-label="Afficher le panneau latéral">›</button>
+  <div id="edge-left" class="edge-strip edge-left" aria-hidden="true"></div>
+  <div id="edge-top" class="edge-strip edge-top" aria-hidden="true"></div>
 
   <div id="help-modal" class="modal" hidden>
     <div class="modal-backdrop" data-close="1"></div>
@@ -256,6 +278,7 @@
   <script src="js/settings.js"></script>
   <script src="js/merge.js"></script>
   <script src="js/editor.js"></script>
+  <script src="js/file-watch.js"></script>
   <script src="js/files.js"></script>
   <script src="js/style.js"></script>
   <script src="js/repulsion.js"></script>
@@ -269,6 +292,7 @@
   <script src="js/help.js"></script>
   <script src="js/forms.js"></script>
   <script src="js/trash.js"></script>
+  <script src="js/link-series.js"></script>
   <script src="js/tools.js"></script>
   <script src="js/clipboard.js"></script>
   <script src="js/settings-ui.js"></script>
@@ -276,6 +300,7 @@
   <script src="js/project.js"></script>
   <script src="js/layouts.js"></script>
   <script src="js/tabs.js"></script>
+  <script src="js/view-ui.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -165,6 +165,7 @@ const SettingsUI = {
     if (spec.type === "enum") {
       return `<select>${spec.options.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("")}</select>`;
     }
+    if (spec.type === "list") return "<input type=\"text\" class=\"settings-list-input\" spellcheck=\"false\" autocomplete=\"off\" placeholder=\"clé1, clé2, …\" />";
     return `<input type="range" min="${spec.min}" max="${spec.max}" step="${spec.step}" /> <output></output>`;
   },
 
@@ -196,7 +197,7 @@ const SettingsUI = {
 
       if (document.activeElement !== input) {
         if (spec.type === "boolean") input.checked = value;
-        else input.value = value;
+        else input.value = spec.type === "list" ? value.join(", ") : value;
       }
       const output = row.querySelector("output");
       if (output) output.textContent = String(value);

@@ -408,12 +408,35 @@ const Style = {
 
       claimed.add(key);
 
-      const style = this.cleanLink(link.style);
+      const style = this.linkStyle(link, model.style);
 
       if (Object.keys(style).length) {
         edge.data.linkStyle = style;
       }
     });
+  },
+
+  // Effective link style: default < style.links[type] < links[].style (pure).
+  linkStyle(link, style) {
+    return Object.assign({}, this.levelOfLink(style && style.links, link && link.type), this.cleanLink(link && link.style));
+  },
+
+  // Validated own entry `type` of a style.links map ({} when absent).
+  levelOfLink(map, type) {
+    return map && typeof map === "object" && type && Object.prototype.hasOwnProperty.call(map, type) ? this.cleanLink(map[type]) : {};
+  },
+
+  // Distinct link types of a model with their counts, most used first.
+  linkTypes(model) {
+    const counts = new Map();
+
+    ((model && model.links) || []).forEach((link) => {
+      if (link.type) {
+        counts.set(link.type, (counts.get(link.type) || 0) + 1);
+      }
+    });
+
+    return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   },
 
   // Attaches rule data to node elements and drops hidden nodes.

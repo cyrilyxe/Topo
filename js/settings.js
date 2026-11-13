@@ -19,6 +19,10 @@
     return { key, type: "number", default: def, min, max, step, label, help };
   }
 
+  function list(key, def, label, help) {
+    return { key, type: "list", default: def, label, help };
+  }
+
   const SPEC_ALL = [
     bool("delete.relinkToParent", false, "Suppression : rattacher les liens au parent", "Case par défaut de la confirmation de suppression : les liens des briques supprimées sont rattachés à leur parent."),
     choice("ids.scheme", "slug", ["slug", "parent-slug", "type-n"], "Identifiants automatiques", "slug : depuis le libellé ; parent-slug : <id du parent>-<libellé> ; type-n : <type>-<n> incrémental."),
@@ -34,10 +38,18 @@
     num("nodes.size", 1, 0.6, 1.6, 0.05, "Taille des nœuds", "Facteur de taille global."),
     choice("layout.default", "fcose", LAYOUT_OPTIONS, "Disposition par défaut", "Disposition appliquée quand le document n’en précise pas."),
     num("tree.indent", 28, 8, 80, 1, "Indentation de l’arbre (px)", "Décalage par niveau en disposition arbre."),
-    choice("meta.card.when", "never", ["leaf", "expanded", "always", "never"], "Fiche métadonnée : quand", "leaf : brique sans enfant visible ; expanded : groupe déplié ; always ; never."),
+    bool("ui.sidePanel", true, "Afficher le panneau latéral", "Affiche le panneau latéral (éditeur, inspecteur, style, anomalies). Raccourci : Ctrl+B."),
+    bool("ui.controls", true, "Afficher les contrôles du diagramme", "Affiche la barre de contrôles du haut et la palette d’outils du diagramme (le menu Contrôles reste disponible)."),
+    bool("fullscreen.edgeReveal", true, "Plein écran : révéler les panneaux au survol des bords", "En plein écran, survoler le bord gauche affiche le panneau latéral, le bord haut (ou la touche Alt) affiche le bandeau."),
+    choice("meta.card.when", "never",["leaf", "expanded", "always", "never"], "Fiche métadonnée : quand", "leaf : brique sans enfant visible ; expanded : groupe déplié ; always ; never."),
     choice("meta.card.position", "top-right", ["top-left", "top-right", "bottom-left", "bottom-right", "free"], "Fiche métadonnée : position", "Coin d’ancrage, ou free (déplaçable)."),
     num("meta.card.maxChars", 50, 10, 200, 1, "Fiche métadonnée : caractères par ligne", "Au-delà, le texte est tronqué."),
     num("meta.card.maxLines", 3, 1, 20, 1, "Fiche métadonnée : lignes", "Au-delà, la fiche est tronquée."),
+    bool("links.multi", false, "Liens multiples", "Mode Lien : les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même ponctuellement."),
+    bool("links.multiAnchor", true, "Liens multiples : garder la source", "Série de liens : la source reste armée après chaque lien (clic droit pour la changer). Désactivé : elle est relâchée après chaque paire (clic source puis clic cible)."),
+    bool("files.watch", true, "Surveiller le fichier ouvert", "Détecte qu’un autre programme a modifié le fichier ouvert (retour de focus et toutes les 2 s) : bandeau « Recharger / Ignorer » et marqueur dans l’onglet."),
+    bool("files.autoReload", false, "Recharger automatiquement", "Si le fichier change sur le disque et que l’onglet n’a pas de modification non enregistrée, le recharger sans bandeau (nécessite la surveillance)."),
+    list("meta.keys", ["owner", "status", "path", "repo", "version", "environment", "todo", "doc"], "Clés de métadonnées suggérées", "Clés proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (séparées par des virgules)."),
     { key: "style.presets", type: "object", hidden: true, default: { nodes: {}, links: {} }, label: "Styles nommés", help: "Styles de brique et de lien enregistrés (géré par l’onglet Style)." }
   ];
   const SPEC = SPEC_ALL.filter((s) => !s.hidden);
@@ -52,6 +64,11 @@
     if (!spec) return undefined;
     if (spec.type === "boolean") return typeof value === "boolean" ? value : undefined;
     if (spec.type === "enum") return spec.options.includes(value) ? value : undefined;
+    if (spec.type === "list") {
+      const items = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : null;
+      if (!items) return undefined;
+      return Array.from(new Set(items.filter((v) => typeof v === "string" || typeof v === "number").map((v) => String(v).trim()).filter(Boolean)));
+    }
     if (spec.type === "object") {
       if (!isPlain(value)) return undefined;
       const out = {};
@@ -152,7 +169,7 @@
     if (sk !== undefined) {
       const kept = {};
       const flat = flatten(raw[sk]);
-      Object.keys(flat).forEach((k) => { if (flat[k] !== base[k]) kept[k] = flat[k]; });
+      Object.keys(flat).forEach((k) => { if (JSON.stringify(flat[k]) !== JSON.stringify(base[k])) kept[k] = flat[k]; });
       out.settings = kept;
     }
     const style = pickKey(raw, ["style", "presentation"]);

@@ -569,6 +569,36 @@
     return dump(ctx.doc);
   }
 
+  // Adds several links at once. pairs: [{ from, to }] (duplicates ignored); common: { type, label, style }.
+  // With a type, a non-empty style is merged into style.links[type]; without type it goes on each link.
+  function addLinks(text, pairs, common) {
+    const c = common || {};
+    const style = isPlain(c.style) && Object.keys(c.style).length ? c.style : null;
+    const seen = new Set();
+    let next = String(text);
+    (pairs || []).forEach((p) => {
+      const key = `${p.from}\u0000${p.to}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const link = { from: p.from, to: p.to };
+      if (c.label) link.label = c.label;
+      if (c.type) link.type = c.type;
+      if (style && !c.type) link.style = style;
+      next = addLink(next, link);
+    });
+    if (style && c.type) {
+      const model = Model.parse(next);
+      const old = model.style || {};
+      const block = {};
+      if (old.size !== undefined && old.size !== null && Number(old.size) !== 1) block.size = old.size;
+      if ((old.rules || []).length) block.rules = old.rules.map((r) => ({ ...r }));
+      ["presets", "roles", "types", "links"].forEach((k) => { if (old[k] && Object.keys(old[k]).length) block[k] = JSON.parse(JSON.stringify(old[k])); });
+      block.links = { ...(block.links || {}), [c.type]: { ...((block.links || {})[c.type] || {}), ...style } };
+      next = setTopLevel(next, "style", block);
+    }
+    return next;
+  }
+
   function linkItem(ctx, index) {
     const item = rawLinks(ctx)[index];
     if (!YAML.isMap(item)) throw new Error(`Lien introuvable : n°${index}.`);
@@ -675,5 +705,48 @@
     return dump(ctx.doc);
   }
 
-  return { addNode, updateNode, removeNodes, moveNode, renameId, renameRefs, followId, exportNodes, slugify, autoId, isAutoId, ID_SCHEMES, reorder, addLink, updateLink, removeLinks, setTopLevel, trashPush, trashRestore };
+  // Plain scalars holding ": " break YAML ("bad indentation of a mapping entry"); wrap them in double quotes.
+  // Returns { text, lines } with the 1-based lines changed. Block scalars (| >) and their content are left alone.
+  function quoteUnsafeScalars(text) {
+    const eol = text.includes("\r\n") ? "\r\n" : "\n";
+    const rows = text.split(/\r?\n/);
+    const lines = [];
+    let blockIndent = -1;
+
+    const out = rows.map((row, index) => {
+      const indent = row.search(/\S/);
+
+      if (blockIndent >= 0) {
+        if (indent < 0 || indent > blockIndent) {
+          return row;
+        }
+
+        blockIndent = -1;
+      }
+
+      const match = /^(\s*(?:-\s+)?[^\s#'"{[][^:#]*?:\s+)(.+?)\s*$/.exec(row);
+
+      if (!match) {
+        return row;
+      }
+
+      const value = match[2];
+
+      if (/^[|>][-+0-9]*$/.test(value)) {
+        blockIndent = indent;
+        return row;
+      }
+
+      if (/^["'[{&*!|>]/.test(value) || !(/:\s/.test(value) || /:$/.test(value))) {
+        return row;
+      }
+
+      lines.push(index + 1);
+      return `${match[1]}"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+    });
+
+    return { text: out.join(eol), lines };
+  }
+
+  return { quoteUnsafeScalars, addNode, updateNode, removeNodes, moveNode, renameId, renameRefs, followId, exportNodes, slugify, autoId, isAutoId, ID_SCHEMES, reorder, addLink, addLinks, updateLink, removeLinks, setTopLevel, trashPush, trashRestore };
 });

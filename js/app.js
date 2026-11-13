@@ -74,8 +74,41 @@ const App = {
     this.els.message.className = `message ${level}`;
   },
 
+  // A frequent YAML error is an unquoted value holding ": " (e.g. "Hors ligne : …"): offer to quote such values in one click.
+  offerQuoteFix(text) {
+    const fix = DocEdit.quoteUnsafeScalars(text);
+
+    if (!fix.lines.length || !this.els.message || (typeof Project !== "undefined" && Project.shouldRoute())) {
+      return;
+    }
+
+    try {
+      Model.parse(fix.text);
+    } catch (error) {
+      return;
+    }
+
+    const button = document.createElement("button");
+    const list = fix.lines.slice(0, 5).join(", ") + (fix.lines.length > 5 ? "…" : "");
+
+    button.type = "button";
+    button.className = "message-action";
+    button.textContent = `Mettre entre guillemets (ligne${fix.lines.length > 1 ? "s" : ""} ${list})`;
+    button.title = "Une valeur contient « : » sans guillemets ; la mettre entre guillemets corrige le YAML (annulable).";
+    button.addEventListener("click", () => {
+      if (this.edit(`Guillemets ajoutés (${fix.lines.length})`, (current) => DocEdit.quoteUnsafeScalars(current).text)) {
+        this.showMessage(`${fix.lines.length} valeur${fix.lines.length > 1 ? "s" : ""} mise${fix.lines.length > 1 ? "s" : ""} entre guillemets.`, "success");
+      }
+    });
+    this.els.message.append(" ", button);
+  },
+
   loadText(text, options = {}) {
     clearTimeout(this.applyTimer);
+
+    if (typeof LinkSeries !== "undefined" && LinkSeries.isActive()) {
+      LinkSeries.finish();
+    }
 
     this.name = options.name || null;
     Files.current = { name: this.name, handle: options.handle || null };
@@ -356,6 +389,7 @@ const App = {
       model = Model.parse(text);
     } catch (error) {
       this.showMessage(`Erreur YAML : ${error.message}`, "error");
+      this.offerQuoteFix(text);
 
       if (options.initial) {
         this.model = null;
@@ -866,13 +900,15 @@ const App = {
       return;
     }
 
+    const linkTool = ready && Tools.current === "link";
+
     if (!nodes.length && !edges.length) {
-      header.innerHTML = "";
-      header.hidden = true;
+      header.innerHTML = linkTool ? `<h3>Mode Lien</h3>${this.linkMultiHtml()}` : "";
+      header.hidden = !linkTool || !["editor", "inspector", "style"].includes(name);
       return;
     }
 
-    header.innerHTML = this.selectionHeaderHtml(nodes, edges, this.model);
+    header.innerHTML = this.selectionHeaderHtml(nodes, edges, this.model) + (linkTool ? this.linkMultiHtml() : "");
     header.hidden = !["editor", "inspector", "style"].includes(name);
   },
 
@@ -888,8 +924,14 @@ const App = {
     const name = (id) => (id && model.byId.has(id) ? model.byId.get(id).label : "…");
     const path = (id) => (id && model.byId.has(id) ? Model.pathLabel(id, model) : "…");
 
-    header.innerHTML = `<h3>Lien : ${escapeHtml(name(from))} → ${escapeHtml(name(to))}</h3><p class="path">${escapeHtml(path(from))} → ${escapeHtml(path(to))}</p>`;
+    header.innerHTML = `<h3>Lien : ${escapeHtml(name(from))} → ${escapeHtml(name(to))}</h3><p class="path">${escapeHtml(path(from))} → ${escapeHtml(path(to))}</p>${this.linkMultiHtml()}`;
     header.hidden = false;
+  },
+
+  // "Liens multiples" checkbox of the Link tool header (setting links.multi).
+  linkMultiHtml() {
+    return `<label class="link-multi" title="Les liens tracés forment une série brouillon (panneau « Série de liens ») créée d’un coup ; Ctrl pendant le tracé fait de même."><input type="checkbox" data-link-multi="1"${Settings.get("links.multi") ? " checked" : ""} /> Liens multiples</label>
+      <label class="link-multi link-anchor" title="La source reste armée après chaque lien (clic droit pour la changer). Décoché : relâchée après chaque paire."><input type="checkbox" data-link-anchor="1"${Settings.get("links.multiAnchor") ? " checked" : ""}${Settings.get("links.multi") ? "" : " disabled"} /> Garder la source</label>`;
   },
 
   reduceSelection(nodeId, edgeId) {
@@ -1218,7 +1260,7 @@ const App = {
       const result = await Files.open();
 
       if (result) {
-        Tabs.openDocument(result.text, { name: result.name, handle: result.handle });
+        Tabs.openDocument(result.text, { name: result.name, handle: result.handle, sig: result.sig });
         this.showMessage(`« ${result.name} » ouvert.`, "success");
       }
     } catch (error) {
@@ -1240,6 +1282,10 @@ const App = {
       } else if (asNew) {
         result = await Files.saveAs(text, this.suggestedName());
       } else {
+        if (Files.current.handle && (await FileWatch.confirmOverwrite()) !== "overwrite") {
+          return;
+        }
+
         Files.current = { name: this.name, handle: Files.current.handle };
         result = await Files.save(text);
       }
@@ -1271,6 +1317,7 @@ const App = {
       this.persistText();
       this.persistView();
       this.updateDirty();
+      await FileWatch.markSaved();
       this.showMessage(`« ${this.name || "document"} » enregistré.`, "success");
     } catch (error) {
       this.showMessage(`Enregistrement impossible : ${error.message}`, "error");
@@ -1322,6 +1369,7 @@ const App = {
       "open": () => this.openFile(),
       "save": () => this.save(false),
       "save-as": () => this.save(true),
+      "reload": () => FileWatch.reload(),
       "import-json": () => this.openFile(),
       "close-tab": () => Tabs.close(),
       "next-tab": () => Tabs.step(1),
@@ -1339,6 +1387,7 @@ const App = {
       "undo": () => this.undo(),
       "redo": () => this.redo(),
       "settings": () => SettingsUI.open(),
+      "fullscreen": () => ViewUi.toggleFullscreen(),
       "relayout": () => {
         Graph.relayout(this.layout);
         this.schedulePersistView();
@@ -1598,6 +1647,9 @@ const App = {
       } else if (mod && key === "o") {
         event.preventDefault();
         this.openFile();
+      } else if (event.altKey && !mod && !event.shiftKey && (key === "r" || event.code === "KeyR")) {
+        event.preventDefault();
+        FileWatch.reload();
       } else if (mod && key === "w" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         Tabs.close();
@@ -1688,6 +1740,27 @@ const App = {
 
     Graph.cy.on("render", () => this.moveCard());
     Graph.cy.on("select unselect", () => this.scheduleSelectionChange());
+    document.getElementById("selection-header").addEventListener("change", (event) => {
+      if (event.target.matches("input[data-link-anchor]")) {
+        Settings.set("links.multiAnchor", event.target.checked, Settings.source("links.multiAnchor") === "document" ? "document" : "local");
+      } else if (event.target.matches("input[data-link-multi]")) {
+        const checked = event.target.checked;
+        const apply = () => Settings.set("links.multi", checked, Settings.source("links.multi") === "document" ? "document" : "local");
+
+        // Unchecking while a series is open = closing it (with confirmation when drafts exist).
+        if (!checked && LinkSeries.isActive()) {
+          LinkSeries.requestClose().then((closed) => (closed ? apply() : this.updateSelectionHeader()));
+        } else {
+          apply();
+        }
+      }
+    });
+    Settings.onChange((keys) => {
+      if (keys.includes("links.multi") || keys.includes("links.multiAnchor")) {
+        this.updateSelectionHeader();
+        LinkSeries.syncAnchor();
+      }
+    });
     document.getElementById("selection-header").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-sel-node], button[data-sel-edge]");
 
@@ -1740,7 +1813,9 @@ const App = {
     this.initSplitter();
     this.bindUi();
     Layouts.init();
+    ViewUi.init();
     Tabs.init();
+    FileWatch.init();
 
     if (Tabs.restore()) {
       return;

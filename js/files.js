@@ -55,7 +55,7 @@ const Files = {
       };
     }
 
-    return { text: raw, name: file.name, handle };
+    return { text: raw, name: file.name, handle, sig: handle ? FileWatch.signatureOf(file) : null };
   },
 
   pickWithInput() {

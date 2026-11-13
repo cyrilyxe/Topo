@@ -47,6 +47,7 @@ links:                      # relations orientées entre briques (n'importe quel
   - from: api
     to: base-donnees
     label: lectures / écritures
+    type: sync              # libre ; son style se règle dans style.links (voir §2 bis)
     style: { color: "#2563eb", width: 2, line: dashed, arrow: vee }   # optionnel, voir §2 bis
 ```
 
@@ -68,6 +69,8 @@ style:
     database: { color: "#dcfce7", shape: barrel }
   roles:                    # prioritaire sur types
     domain:   { border: "#7c3aed", borderStyle: dashed, borderWidth: 2, bold: true }
+  links:                    # style par type de lien (links[].type) ; links[].style reste prioritaire
+    async: { line: dotted, arrow: vee, color: "#7c3aed" }
   rules:                    # ciblées sur un nœud (prioritaires sur roles et types)
     - target: plateforme.donnees.cache
       color: "#fef3c7"
@@ -80,9 +83,11 @@ view:
     revue: { positions: {…}, collapsed: […], zoom: 1, pan: {…}, layout: fcose, savedAt: "…" }
 settings:                   # réglages propres à ce fichier (prioritaires sur la config locale)
   ids.scheme: slug          # slug | parent-slug | type-n
+  meta.keys: [owner, status, repo]   # clés de meta proposées dans le formulaire de brique
+  links.multi: false        # outil Lien : liens en série depuis la même source
 ```
 
-- Priorité des styles : défaut du type < `style.types` < `style.roles` < `style.rules`.
+- Priorité des styles : défaut du type < `style.types` < `style.roles` < `style.rules`. Pour les liens : défaut < `style.links[type]` < `links[].style` (mêmes clés que `links[].style`).
 - `shape` : round-rectangle, rectangle, ellipse, hexagon, diamond, barrel, rhomboid, tag, star… La forme est ignorée pour un groupe déplié.
 - La couleur du texte est contrastée automatiquement. Ne fixe `textColor` que pour un besoin précis.
 - `links[].style` accepte `color`, `width`, `line` (solid | dashed | dotted), `arrow` et `sourceArrow` (triangle | vee | triangle-backcurve | circle | square | diamond | tee | none), et `textColor`.
@@ -165,5 +170,7 @@ Garde une copie de la version que tu as fournie (ou retrouve-la via git). Quand 
 - Un nouveau `type` ou `role` est libre. Si `style.types` ou `style.roles` existe déjà, ajoute une entrée pour le nouveau, ou laisse l'utilisateur la créer depuis la légende.
 - Ids uniques globalement si possible ; sinon, références qualifiées obligatoires.
 - Pas de tabulations (indentation en espaces).
+- **Guillemets obligatoires** pour toute valeur qui contient « : » suivi d'un espace (fréquent en français : « Hors ligne : … »),
+  qui commence par `- [ { & * ! | > ' " % @` ou qui finit par « : ». Préfère `"…"` (échappe `\"`) ; un texte long va en `|`.
 - Ne supprime jamais les blocs `style:`, `view:`, `settings:`, `trash:` d'un fichier que l'utilisateur t'a rendu.
 - Garde la carte à hauteur d'humain : si elle dépasse ~80 briques, passe en briques multi-fichiers.

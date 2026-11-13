@@ -24,9 +24,10 @@ Aucun build, aucun backend. Les bibliothèques (js-yaml, Cytoscape, cytoscape-sv
 - Éditeur YAML (CodeMirror) appliqué automatiquement après 600 ms d’inactivité ; les erreurs de syntaxe n’effacent pas le graphe courant.
 - Groupes imbriqués repliables (double-clic), méta-arêtes, fiche de métadonnées dans le groupe, recherche texte / regex, menus contextuels.
 - Panneaux : Éditeur, Inspecteur, Style (règles de présentation écrites dans le bloc `style:`), Anomalies (références ambiguës ou inconnues avec boutons de correction).
-- Fichiers : Nouveau, Ouvrir, Enregistrer (Ctrl+S), Enregistrer sous (Ctrl+Maj+S), import JSON.
+- Fichiers : Nouveau, Ouvrir, Enregistrer (Ctrl+S), Enregistrer sous (Ctrl+Maj+S), import JSON ; Recharger depuis le disque (Alt+R, annulable par Ctrl+Z) et détection d’un fichier modifié par un autre programme (bandeau Recharger / Ignorer, marqueur ⟳ dans l’onglet, confirmation avant d’écraser ; réglages `files.watch` et `files.autoReload`).
 - Persistance de la vue (repli, zoom, déplacement, disposition, positions) dans `localStorage` par document, et dans le bloc `view:` du fichier à l’enregistrement (option du menu Vue).
 - Exports : SVG, PNG, JSON, Mermaid.
+- Affichage : panneau latéral (Ctrl+B) et contrôles du diagramme masquables (menu Vue), menu Contrôles (outils, dispositions, ajuster, replier/déplier), plein écran du diagramme (Ctrl+Maj+F, Échap pour quitter ; en plein écran, le bord gauche révèle le panneau, le bord haut ou Alt le bandeau).
 - Aide (`?` ou F1) générée depuis le schéma, thème clair / sombre.
 
 ## Schéma résumé

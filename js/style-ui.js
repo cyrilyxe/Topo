@@ -993,7 +993,7 @@ const StyleUI = {
       };
 
       // Blocks owned by other features are carried over untouched.
-      ["presets", "roles", "types"].forEach((key) => {
+      ["presets", "roles", "types", "links"].forEach((key) => {
         if (model.style && model.style[key] !== undefined) {
           style[key] = JSON.parse(JSON.stringify(model.style[key]));
         }
@@ -1011,7 +1011,7 @@ const StyleUI = {
         block.rules = style.rules;
       }
 
-      ["presets", "roles", "types"].forEach((key) => {
+      ["presets", "roles", "types", "links"].forEach((key) => {
         if (style[key] && Object.keys(style[key]).length) {
           block[key] = style[key];
         }
@@ -1131,17 +1131,27 @@ const StyleUI = {
   linkEffective(entries) {
     const edge = entries[0].edge;
     const meta = Boolean(edge.data("isMeta"));
-    const own = Style.cleanLink(this.uniqueLinks(entries)[0].link.style);
+    const first = this.uniqueLinks(entries)[0].link;
+    const own = Style.cleanLink(first.style);
+    const typed = Style.levelOfLink(App.getModel().style && App.getModel().style.links, first.type);
+    const shown = Object.assign({}, typed, own);
 
     return {
       own,
-      color: this.toHex(own.color) || this.toHex(Graph.token(meta ? "--meta-edge" : "--edge", "#8b98ad")) || "#8b98ad",
-      width: own.width || (meta ? 3 : 2),
-      line: own.line || (meta ? "dashed" : "solid"),
-      arrow: own.arrow || "triangle",
-      sourceArrow: own.sourceArrow || "none",
-      textColor: this.toHex(own.textColor) || this.toHex(edge.data("autoText")) || "#475569"
+      typed,
+      type: first.type || "",
+      color: this.toHex(shown.color) || this.toHex(Graph.token(meta ? "--meta-edge" : "--edge", "#8b98ad")) || "#8b98ad",
+      width: shown.width || (meta ? 3 : 2),
+      line: shown.line || (meta ? "dashed" : "solid"),
+      arrow: shown.arrow || "triangle",
+      sourceArrow: shown.sourceArrow || "none",
+      textColor: this.toHex(shown.textColor) || this.toHex(edge.data("autoText")) || "#475569"
     };
+  },
+
+  // "lien" / "type" / fallback: where the displayed value of a link property comes from.
+  linkProv(eff, prop, fallback) {
+    return eff.own[prop] !== undefined ? "lien" : eff.typed[prop] !== undefined ? `type « ${escapeHtml(eff.type)} »` : fallback;
   },
 
   recentLinks() {
@@ -1197,7 +1207,7 @@ const StyleUI = {
       </div>
       <div class="form-grid">
         <div class="style-field">
-          <span>Couleur du lien <small class="prov">${eff.own.color ? "lien" : "par défaut"}</small></span>
+          <span>Couleur du lien <small class="prov">${this.linkProv(eff, "color", "par défaut")}</small></span>
           ${this.colorField("link-color", eff.color, "link-clear", "color")}
         </div>
         <label>Épaisseur : <span id="link-width-value">${eff.width} px</span>
@@ -1207,10 +1217,10 @@ const StyleUI = {
         <div class="style-field"><span>Flèche (cible)</span>${this.select("link-arrow", Style.LINK_ARROWS, eff.arrow, "Flèche côté cible")}</div>
         <div class="style-field"><span>Flèche (source)</span>${this.select("link-source", Style.LINK_ARROWS, eff.sourceArrow, "Flèche côté source")}</div>
         <div class="style-field">
-          <span>Couleur de l’étiquette <small class="prov">${eff.own.textColor ? "lien" : "auto (contraste)"}</small></span>
+          <span>Couleur de l’étiquette <small class="prov">${this.linkProv(eff, "textColor", "auto (contraste)")}</small></span>
           ${this.colorField("link-text", eff.textColor, "link-clear", "textColor")}
         </div>
-        <div class="actions"><button type="button" data-act="link-default" title="Retire le style du lien (retour au style par défaut)">Par défaut</button></div>
+        <div class="actions"><button type="button" data-act="link-default" title="Retire le style du lien (retour au style par défaut${eff.type ? " du type" : ""})">${eff.type ? "Revenir au défaut du type" : "Par défaut"}</button></div>
       </div>
       ${recents.length ? `<h4>Derniers styles de lien</h4>
       <div class="link-recents">${recents.map((item, index) => `<button type="button" class="link-recent" data-act="link-recent" data-index="${index}" title="${escapeHtml(JSON.stringify(item))}">${this.linkPreviewHtml(item)} <small>${escapeHtml(item.arrow || "")}</small></button>`).join("")}</div>` : ""}

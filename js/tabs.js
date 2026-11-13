@@ -189,12 +189,20 @@
 
     Layouts.refresh();
     this.persistSoon();
+
+    if (typeof FileWatch !== "undefined") FileWatch.onActivate();
   };
 
   api.switchTo = function switchTo(id) {
     const tab = this.tabs.find((item) => item.id === id);
 
     if (!tab || id === this.activeId) return;
+
+    // An open link series is closed first (confirmation when drafts exist).
+    if (typeof LinkSeries !== "undefined" && LinkSeries.isActive()) {
+      LinkSeries.requestClose().then((closed) => { if (closed) this.switchTo(id); });
+      return;
+    }
 
     this.captureActive();
     this.activeId = id;
@@ -227,7 +235,7 @@
     }
 
     Object.assign(tab, {
-      name: null, handle: null, text: "", dirty: false, savedText: undefined, view: null, history: null, project: null, layoutName: null
+      name: null, handle: null, text: "", dirty: false, savedText: undefined, view: null, history: null, project: null, layoutName: null, watch: null
     }, fields);
     this.loadInto(tab, { keepProject: Boolean(fields.keepProject) });
     this.render();
@@ -240,7 +248,12 @@
 
   // File > Open: a new tab, except when the current one is still blank.
   api.openDocument = function openDocument(text, options = {}) {
-    this.place({ text, name: options.name || null, handle: options.handle || null }, true);
+    this.place({
+      text,
+      name: options.name || null,
+      handle: options.handle || null,
+      watch: typeof FileWatch !== "undefined" ? FileWatch.fresh(options.sig) : null
+    }, true);
   };
 
   // Project > Open: same, called once the folder is chosen and before the merged document loads.
@@ -335,7 +348,7 @@
       const name = this.label(tab);
 
       return `<div class="doc-tab${live ? " active" : ""}" role="tab" aria-selected="${live}" data-id="${escapeHtml(tab.id)}" title="${escapeHtml(name)}">
-        <span class="doc-tab-name">${escapeHtml(name)}</span>${dirty ? "<span class=\"doc-tab-dirty\" title=\"Modifications non enregistrées\">●</span>" : ""}
+        <span class="doc-tab-name">${escapeHtml(name)}</span>${dirty ? "<span class=\"doc-tab-dirty\" title=\"Modifications non enregistrées\">●</span>" : ""}${typeof FileWatch !== "undefined" ? FileWatch.staleMark(tab) : ""}
         <button type="button" class="doc-tab-close" title="Fermer l’onglet (Ctrl+W)" aria-label="Fermer l’onglet">✕</button>
       </div>`;
     }).join("") + "<button id=\"doc-tab-new\" type=\"button\" class=\"doc-tab-new\" title=\"Nouveau document dans un nouvel onglet\" aria-label=\"Nouvel onglet\">＋</button>";
@@ -344,6 +357,8 @@
       this.lastHtml = html;
       bar.innerHTML = html;
     }
+
+    if (typeof FileWatch !== "undefined") FileWatch.render();
   };
 
   api.persistSoon = function persistSoon() {

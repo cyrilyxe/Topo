@@ -57,6 +57,7 @@
     assign(out, "from", pick(l, ["from", "de"]));
     assign(out, "to", pick(l, ["to", "vers"]));
     assign(out, "label", l.label);
+    assign(out, "type", l.type);
     assign(out, "meta", normalizeMeta(l.meta));
     assign(out, "style", normalizeLinkStyle(l.style));
     return out;
@@ -94,7 +95,7 @@
     const rules = pick(raw, ["rules", "regles"]);
     if (Array.isArray(rules)) out.rules = rules.map(normalizeRule);
     // Blocks owned by other features, kept as written.
-    ["presets", "roles", "types"].forEach((k) => { if (isObj(raw[k])) out[k] = raw[k]; });
+    ["presets", "roles", "types", "links"].forEach((k) => { if (isObj(raw[k])) out[k] = raw[k]; });
     return out;
   }
 
@@ -150,6 +151,7 @@
     h("Lien", "from", ["de"], "référence", "Nœud source : id, id qualifié (a.b.c) ou suffixe unique.", "- from: web"),
     h("Lien", "to", ["vers"], "référence", "Nœud cible (même syntaxe que from).", "  to: api"),
     h("Lien", "label", [], "texte", "Texte affiché sur l’arête.", "  label: requêtes HTTPS"),
+    h("Lien", "type", [], "texte libre", "Type du lien (libre : sync, async, dépendance…). Son style se règle une fois pour tous les liens du type dans style.links ou depuis la légende.", "  type: async"),
     h("Lien", "style", [], "objet", "Style du lien : color, width, line, arrow, sourceArrow, textColor.", "  style: { color: \"#e74c3c\", width: 3, line: dashed, arrow: vee }"),
     h("Lien", "style.color", [], "couleur", "Couleur du trait et des flèches.", "    color: \"#e74c3c\""),
     h("Lien", "style.width", [], "nombre 1–8", "Épaisseur du trait.", "    width: 3"),
@@ -176,6 +178,7 @@
     h("Style", "shape", ["forme"], "round-rectangle | rectangle | ellipse | hexagon | diamond | barrel | rhomboid | tag | star | octagon | cut-rectangle", "Forme du nœud (feuilles et groupes repliés ; un groupe déplié reste un rectangle). Valable dans une règle, un rôle ou un type.", "  shape: hexagon"),
     h("Style", "style.roles", ["roles"], "objet", "Style partagé par toutes les briques d’un rôle (clés : color, border, borderStyle, borderWidth, shape, textColor, bold, italic, opacity, size). Priorité : défaut du type < style.types < style.roles < règle de brique.", "style:\n  roles:\n    domain: { shape: hexagon, color: \"#fde68a\" }"),
     h("Style", "style.types", [], "objet", "Style partagé par toutes les briques d’un type (mêmes clés que style.roles).", "style:\n  types:\n    database: { shape: barrel }"),
+    h("Style", "style.links", [], "objet", "Style partagé par tous les liens d’un type : { <type>: {color, width, line, arrow, sourceArrow, textColor} }. Priorité : défaut < style.links[type] < links[].style.", "style:\n  links:\n    async: { line: dotted, arrow: vee, color: \"#7c3aed\" }"),
     h("Recherche", "type:x role:y", [], "filtre", "Dans le champ de recherche : type:service role:user (guillemets si espace : role:\"my role\"). Plusieurs valeurs d’une même clé = OU, clés différentes = ET ; combinable avec du texte ou une /regex/. Les puces de la légende écrivent ces filtres (Maj+clic : cumuler).", "type:service role:user api"),
     h("Style", "style.presets", [], "objet", "Styles nommés réutilisables : { nodes: {nom: {propriétés de règle}}, links: {nom: {propriétés de style de lien}} }. Copiés depuis l’onglet Style.", "style:\n  presets:\n    nodes:\n      Alerte: { color: \"#e74c3c\", borderStyle: dashed }\n    links:\n      Async: { line: dotted, arrow: vee }"),
     h("Vue", "view.collapsed", ["replies"], "liste d’ids", "Groupes repliés.", "view:\n  collapsed: [donnees]"),
@@ -188,6 +191,8 @@
     h("Réglages", "settings", ["reglages"], "objet", "Réglages figés dans le document (priorité maximale : défauts < topo.config.json < local < document). Menu Vue > Réglages.", "settings:\n  edges.curve: taxi\n  nodes.size: 1.2"),
     h("Réglages", "ids.scheme", [], "slug | parent-slug | type-n", "Génération des identifiants de briques : slug (depuis le libellé, défaut), parent-slug (<id parent>-<libellé>), type-n (<type>-<n> incrémental). Un suffixe -2, -3… garantit l’unicité.", "  ids.scheme: parent-slug"),
     h("Réglages", "ids.followMove", [], "booléen", "Régénère l’id d’une brique encore automatique quand on la déplace ou change son libellé ; toutes les références sont réécrites (défaut : false).", "  ids.followMove: true"),
+    h("Réglages", "files.watch", [], "booléen", "Surveille le fichier ouvert : bandeau « modifié par un autre programme » avec Recharger / Ignorer, marqueur ⟳ dans l’onglet (défaut : true).", "  files.watch: true"),
+    h("Réglages", "files.autoReload", [], "booléen", "Recharge sans bandeau un fichier modifié sur le disque quand l’onglet n’a pas de modification non enregistrée (défaut : false).", "  files.autoReload: true"),
     h("Réglages", "drop.repulsion", [], "booléen", "Au relâchement, la boîte déplacée se pose sans chevaucher ses frères (défaut : true).", "  drop.repulsion: true"),
     h("Réglages", "create.placement", [], "click | free-slot", "Placement d’une nouvelle brique : click (défaut) pose son coin haut-gauche au point cliqué ; free-slot cherche un emplacement libre dans le groupe (à la racine, toujours au clic).", "  create.placement: free-slot"),
     h("Réglages", "repulsion.direction", [], "auto | right | down | left | up", "Direction de la répulsion de stabilisation (après ajout, collage, changement de taille, dépli) : la boîte la plus légère est poussée ; auto (défaut) = axe de séparation minimale.", "  repulsion.direction: right"),
@@ -198,6 +203,12 @@
     h("Réglages", "nodes.size", [], "nombre 0,6–1,6", "Taille globale des nœuds (défaut : 1).", "  nodes.size: 1.2"),
     h("Réglages", "layout.default", [], "texte", "Disposition par défaut : fcose, cose, breadthfirst, grid, circle, concentric ou tree (défaut : fcose).", "  layout.default: tree"),
     h("Réglages", "tree.indent", [], "nombre (px)", "Indentation par niveau en disposition arbre (défaut : 28).", "  tree.indent: 28"),
+    h("Réglages", "ui.sidePanel", [], "booléen", "Affiche le panneau latéral (défaut : true ; Vue > Panneau latéral, Ctrl+B).", "  ui.sidePanel: false"),
+    h("Réglages", "ui.controls", [], "booléen", "Affiche la barre de contrôles et la palette d’outils du diagramme (défaut : true ; menu Contrôles).", "  ui.controls: false"),
+    h("Réglages", "fullscreen.edgeReveal", [], "booléen", "Plein écran : le survol des bords (gauche : panneau, haut : bandeau) les fait apparaître en superposition (défaut : true).", "  fullscreen.edgeReveal: true"),
+    h("Réglages", "meta.keys", [], "liste de textes", "Clés de métadonnées proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (défaut : owner, status, path, repo, version, environment, todo, doc).", "  meta.keys: [owner, status, repo]"),
+    h("Réglages", "links.multi", [], "booléen", "Mode Lien : tracer un lien ajoute une paire à une série brouillon (panneau « Série de liens », liens temporaires animés) au lieu d’ouvrir le formulaire ; la source reste armée pour ajouter A→C, etc. Les liens sont créés d’un coup (une entrée d’historique). Ctrl pendant le tracé fait de même ponctuellement. Défaut : false.", "  links.multi: true"),
+    h("Réglages", "links.multiAnchor", [], "booléen", "Série de liens : garder la source armée après chaque lien (défaut : true ; clic droit = relâcher la source, le clic suivant sur une brique en choisit une autre). Désactivé : la source est relâchée après chaque paire (clic source puis clic cible).", "  links.multiAnchor: false"),
     h("Réglages", "meta.card.when", [], "leaf | expanded | always | never", "Quand afficher la fiche métadonnée (défaut : never).", "  meta.card.when: leaf"),
     h("Réglages", "meta.card.position", [], "texte", "Ancrage de la fiche : top-left, top-right, bottom-left, bottom-right ou free (défaut : top-right).", "  meta.card.position: top-right"),
     h("Réglages", "meta.card.maxChars", [], "nombre", "Caractères par ligne avant troncature (défaut : 50).", "  meta.card.maxChars: 50"),
@@ -220,6 +231,7 @@
     { keys: "Ctrl+S", description: "Enregistrer" },
     { keys: "Ctrl+Shift+S", description: "Enregistrer sous…" },
     { keys: "Ctrl+O", description: "Ouvrir un fichier" },
+    { keys: "Alt+R", description: "Recharger depuis le disque (fichier ouvert avec accès direct ; en mode projet, relit toutes les briques) ; Ctrl+Z revient au texte d’avant" },
     { keys: "Ctrl+F", description: "Rechercher un nœud" },
     { keys: "Ctrl+Z", description: "Annuler la dernière action graphique" },
     { keys: "Ctrl+Y", description: "Rétablir (aussi Ctrl+Shift+Z)" },
@@ -227,12 +239,16 @@
     { keys: "Ctrl+Tab / Ctrl+Maj+Tab", description: "Onglet suivant / précédent (app installée ; sinon menu Fichier)" },
     { keys: "Ctrl+W", description: "Fermer l’onglet (app installée ; sinon menu Fichier)" },
     { keys: "V / H / B / L / M", description: "Outil Sélection / Main / Brique / Lien / Déplacer dans…" },
+    { keys: "Ctrl (outil Lien)", description: "Tenu pendant le tracé d’un lien : série de liens (comme la case « Liens multiples ») = brouillon dans le panneau « Série de liens » ; clic sur d’autres briques = liens depuis la même source ; « Créer n liens » les écrit d’un coup ; Échap / Annuler (avec confirmation) abandonne" },
+    { keys: "Clic droit (série de liens)", description: "Relâche la source armée ; le clic suivant sur une brique la choisit comme nouvelle source, le suivant crée la paire (un clic droit maintenu et déplacé déplace toujours la vue ; pas de menu contextuel pendant une série)" },
     { keys: "Espace (maintenu)", description: "Main temporaire (déplacer la vue)" },
     { keys: "Maj/Ctrl + clic", description: "Ajouter ou retirer une brique de la sélection" },
     { keys: "Suppr / Retour arrière", description: "Supprimer la sélection (vers la corbeille)" },
     { keys: "Ctrl+C / Ctrl+X / Ctrl+V", description: "Copier / couper / coller les briques sélectionnées (YAML dans le presse-papiers ; collage dans la brique sélectionnée, sinon à la racine)" },
     { keys: "Ctrl+]  /  Ctrl+[", description: "Avancer / reculer la brique sélectionnée d’un plan" },
     { keys: "Ctrl+Maj+]  /  Ctrl+Maj+[", description: "Premier plan / arrière-plan" },
+    { keys: "Ctrl+B", description: "Afficher / masquer le panneau latéral" },
+    { keys: "Ctrl+Maj+F", description: "Plein écran du diagramme (Échap pour quitter ; survol du bord gauche = panneau, bord haut ou Alt = bandeau)" },
     { keys: "F1", description: "Afficher l’aide" },
     { keys: "Échap", description: "Fermer la fenêtre / désélectionner" },
     { keys: "Double-clic sur un groupe", description: "Replier / déplier le groupe" },
