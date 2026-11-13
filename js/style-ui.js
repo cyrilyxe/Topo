@@ -112,6 +112,8 @@ const StyleUI = {
       this.deleteRule(this.targets);
     } else if (act === "clear") {
       this.apply({ [prop]: null });
+    } else if (act === "shape-pick") {
+      this.apply({ shape: button.dataset.shapePick });
     } else if (act === "swatch") {
       this.pushRecent(color);
       this.apply({ [prop]: color });
@@ -617,9 +619,10 @@ const StyleUI = {
         <div class="style-field">
           <span>Forme <small class="prov">${escapeHtml(shapeFrom)}</small></span>
           <span class="style-row">
-            <select id="style-shape">${Style.SHAPES.map((name) => `<option value="${name}" ${!shape.mixed && shape.value === name ? "selected" : ""}>${name}</option>`).join("")}${shape.mixed ? "<option value=\"\" selected>valeurs mixtes</option>" : ""}</select>
+            <select id="style-shape">${Style.SHAPES.map((name) => `<option value="${name}" ${!shape.mixed && shape.value === name ? "selected" : ""}>${Shapes.isCustom(name) ? `${Shapes.label(name)} (${name})` : name}</option>`).join("")}${shape.mixed ? "<option value=\"\" selected>valeurs mixtes</option>" : ""}</select>
             <button type="button" data-act="clear" data-prop="shape" title="Revenir à la valeur héritée">⟲</button>
           </span>
+          ${Shapes.pickerHtml(shape.mixed ? "" : shape.value, "data-act=\"shape-pick\"")}
         </div>
         <label>Épaisseur de bordure : <span id="style-border-width-value">${borderWidth.mixed ? "valeurs mixtes" : `${borderWidth.value} px`}</span>
           <input id="style-border-width" type="range" min="0" max="8" step="1" value="${borderWidth.value}" />

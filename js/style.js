@@ -1,5 +1,7 @@
 "use strict";
 
+const CustomShapes = typeof Shapes !== "undefined" ? Shapes : require("./shapes.js");
+
 const Style = {
   userScale: 1,
   modelSize: 1,
@@ -7,7 +9,7 @@ const Style = {
   RULE_KEYS: ["label", "color", "border", "opacity", "size", "highlight", "hidden", "textColor", "bold", "italic", "textBackground", "borderStyle", "borderWidth", "shape", "icon", "iconOpacity"],
   // Properties a style.roles / style.types entry may carry.
   LEVEL_KEYS: ["color", "border", "borderStyle", "borderWidth", "shape", "icon", "iconOpacity", "textColor", "bold", "italic", "opacity", "size"],
-  SHAPES: ["round-rectangle", "rectangle", "ellipse", "hexagon", "diamond", "barrel", "rhomboid", "tag", "star", "octagon", "cut-rectangle"],
+  SHAPES: ["round-rectangle", "rectangle", "ellipse", "hexagon", "diamond", "barrel", "rhomboid", "tag", "star", "octagon", "cut-rectangle", ...CustomShapes.names()],
   BORDER_STYLES: ["solid", "dashed", "dotted", "double"],
   LINK_LINES: ["solid", "dashed", "dotted"],
   LINK_ARROWS: ["triangle", "vee", "triangle-backcurve", "circle", "square", "diamond", "tee", "none"],

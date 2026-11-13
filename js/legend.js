@@ -281,6 +281,15 @@ const Legend = {
       shape = `<ellipse cx="10" cy="8" rx="9" ry="6.5" ${paint}/>`;
     } else if (look.shape === "barrel") {
       shape = `<path d="M3 2 Q0 8 3 14 L17 14 Q20 8 17 2 Z" ${paint}/>`;
+    } else if (Shapes.isCustom(look.shape)) {
+      const list = Shapes.points(look.shape).split(" ").map(Number);
+      const pairs = [];
+
+      for (let i = 0; i < list.length; i += 2) {
+        pairs.push(`${(10 + list[i] * 9).toFixed(1)},${(8 + list[i + 1] * 7).toFixed(1)}`);
+      }
+
+      shape = `<polygon points="${pairs.join(" ")}" ${paint} stroke-linejoin="round"/>`;
     } else if (this.SHAPE_POINTS[look.shape]) {
       shape = `<polygon points="${this.SHAPE_POINTS[look.shape]}" ${paint} stroke-linejoin="round"/>`;
     } else {
@@ -474,7 +483,7 @@ const Legend = {
 
     const options = { shape: Style.SHAPES, line: Style.LINK_LINES, arrow: Style.LINK_ARROWS, sourceArrow: Style.LINK_ARROWS }[field.key] || Style.BORDER_STYLES;
 
-    return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><select data-k="${field.key}"><option value="">(défaut)</option>${options.map((name) => `<option value="${name}" ${current === name ? "selected" : ""}>${name}</option>`).join("")}</select></span></div>`;
+    return `<div class="lg-field"><span>${field.label}</span><span class="lg-row"><select data-k="${field.key}"><option value="">(défaut)</option>${options.map((name) => `<option value="${name}" ${current === name ? "selected" : ""}>${field.key === "shape" && Shapes.isCustom(name) ? `${Shapes.label(name)} (${name})` : name}</option>`).join("")}</select></span></div>${field.key === "shape" ? `<div class="lg-field lg-shape-field">${Shapes.pickerHtml(current)}</div>` : ""}`;
   },
 
   // Opens the compact editor of a role / type style under (above) `anchor`.
@@ -641,7 +650,20 @@ const Legend = {
 
     const { kind, value } = this.popTarget;
 
-    if (button.dataset.lgClose) {
+    if (button.dataset.shapePick) {
+      const name = button.dataset.shapePick;
+      const select = this.pop.querySelector("select[data-k=\"shape\"]");
+
+      if (select) {
+        select.value = name;
+      }
+
+      this.pop.querySelectorAll("[data-shape-pick]").forEach((cell) => {
+        cell.classList.toggle("active", cell === button);
+        cell.setAttribute("aria-pressed", String(cell === button));
+      });
+      this.setStyle(kind, value, { shape: name });
+    } else if (button.dataset.lgClose) {
       this.closeEditor();
     } else if (button.dataset.lgReset) {
       this.resetStyle(kind, value);

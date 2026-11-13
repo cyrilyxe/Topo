@@ -516,7 +516,7 @@ const Graph = {
       { selector: "node.collapsed[ruleColor]", style: { "background-opacity": 1 } },
       { selector: "node[ruleOpacity >= 0]", style: { opacity: "data(ruleOpacity)" } },
       { selector: "node[ruleBorderStyle]", style: { "border-style": "data(ruleBorderStyle)" } },
-      { selector: "node[ruleShape]", style: { shape: "data(ruleShape)" } },
+      ...Style.SHAPES.map((name) => ({ selector: `node[ruleShape = "${name}"]`, style: Shapes.cytoscapeStyle(name) })),
       { selector: "node[ruleBorderWidth >= 0]", style: { "border-width": "data(ruleBorderWidth)" } },
       { selector: "node[autoText]", style: { color: "data(autoText)" } },
       { selector: "node[ruleText]", style: { color: "data(ruleText)" } },
@@ -1263,15 +1263,17 @@ const Graph = {
         const collapsed = node.hasClass("collapsed");
         const box = (collapsed ? 56 : 42) * size;
         const px = Math.round(box * (collapsed ? 0.7 : 0.6));
+        // Custom polygons leave a free margin on the left (cloud lobes, chevron notch...).
+        const extra = Math.round(Shapes.inset(rule.shape) * (collapsed ? 210 : 170) * size);
 
         Object.assign(styles, {
           "background-fit": "none",
           "background-width": px,
           "background-height": px,
-          "background-position-x": Math.round(10 * size),
+          "background-position-x": Math.round(10 * size) + extra,
           "background-position-y": "50%",
-          "text-margin-x": Math.round((px + 6) / 2),
-          "text-max-width": Math.max(60, (collapsed ? 190 : 150) * size - px - 6)
+          "text-margin-x": Math.round((px + 6 + extra) / 2),
+          "text-max-width": Math.max(60, (collapsed ? 190 : 150) * size - px - 6 - extra)
         });
       }
 

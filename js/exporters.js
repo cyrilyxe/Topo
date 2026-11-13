@@ -7,6 +7,7 @@
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.Exporters = factory();
 })(typeof self !== "undefined" ? self : this, function () {
+  const Shapes = typeof module === "object" && module.exports ? require("./shapes.js") : self.Shapes;
   const formats = new Map();
 
   function register(def) {
@@ -133,7 +134,7 @@
           strokeWidth: Number(node.numericStyle("border-width")) || 0,
           text: text ? text.hex : "#000000",
           dashed: borderStyle === "dashed" || borderStyle === "dotted",
-          shape: String(node.style("shape") || "round-rectangle"),
+          shape: Shapes && Shapes.isCustom(node.data("ruleShape")) && !node.isParent() ? node.data("ruleShape") : String(node.style("shape") || "round-rectangle"),
           opacity: Number(node.numericStyle("opacity"))
         }
       });
@@ -379,7 +380,7 @@
   function drawioNodeStyle(node, container) {
     const parts = [];
 
-    parts.push(DRAWIO_SHAPES[node.shape] || "rounded=1");
+    parts.push((Shapes && Shapes.drawio(node.shape)) || DRAWIO_SHAPES[node.shape] || "rounded=1");
     parts.push("whiteSpace=wrap", "html=1");
 
     parts.push(node.fillAlpha > 0 ? `fillColor=${node.fill}` : "fillColor=none");
@@ -491,6 +492,15 @@
     return String(value == null ? "" : value).replace(/"/g, "#quot;").replace(/\r?\n/g, "<br/>");
   }
 
+  // Closest classic flowchart node shapes for the custom shapes (the others stay rectangles).
+  const MERMAID_SHAPES = {
+    cloud: ["([", "])"],
+    "cylinder-h": ["[(", ")]"],
+    arrow: [">", "]"],
+    chevron: [">", "]"],
+    file: ["[[", "]]"]
+  };
+
   function toMermaid(scene) {
     const ids = makeIds(scene.nodes, "n_");
     const kids = childrenMap(scene.nodes);
@@ -508,7 +518,10 @@
         return;
       }
 
-      lines.push(`${indent}${id}["${mermaidText(node.label)}"]`);
+      const text = `"${mermaidText(node.label)}"`;
+      const wrap = MERMAID_SHAPES[node.shape] || ["[", "]"];
+
+      lines.push(`${indent}${id}${wrap[0]}${text}${wrap[1]}`);
 
       const key = typeKey(node.type);
 
@@ -557,6 +570,10 @@
 
   function pumlKind(node) {
     const key = typeKey(node.type);
+
+    if (["file", "folder", "cloud"].includes(node.shape)) {
+      return node.shape;
+    }
 
     if (key === "database") {
       return "database";
