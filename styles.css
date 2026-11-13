@@ -710,7 +710,7 @@ body.diagram-fullscreen .splitter { display: none; }
 body.diagram-fullscreen .app-layout { padding: 0; }
 body.diagram-fullscreen .graph-panel { border: 0; border-radius: 0; }
 
-body.diagram-fullscreen.top-overlay .app-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 60; box-shadow: var(--shadow); }
+body.diagram-fullscreen.top-overlay .app-header { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 61; box-shadow: var(--shadow); }
 body.diagram-fullscreen.top-overlay .doc-tabs { display: flex; position: fixed; top: var(--header-h, 44px); left: 0; right: 0; z-index: 60; box-shadow: var(--shadow); }
 body.diagram-fullscreen.side-overlay .editor-panel { display: flex; position: fixed; top: 0; bottom: 0; left: 0; z-index: 55; width: var(--editor-width, 42%); min-width: 320px; border-radius: 0 var(--radius) var(--radius) 0; box-shadow: 6px 0 24px rgba(0, 0, 0, .35); }
 body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }
@@ -781,7 +781,7 @@ body.diagram-fullscreen.side-overlay.top-overlay .editor-panel { z-index: 50; }
 .export-preview-win .ep-view.fit .ep-img { max-width: 100%; max-height: 100%; }
 .export-preview-win .ep-view:not(.fit) .ep-img { display: block; max-width: none; }
 .export-preview-win .ep-empty { margin: 16px; color: var(--text-muted); }
-.export-preview-win .ep-status { padding: 3px 12px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); }
+.export-preview-win .ep-status { padding: 3px 12px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); }
 .export-preview-win .ep-view.text { background: var(--surface); }
 .export-preview-win .ep-text { margin: 0; padding: 10px 12px; font: 12px/1.45 var(--mono); white-space: pre; user-select: text; min-height: 100%; box-sizing: border-box; }
 .export-preview-win .ep-note { padding: 4px 12px; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
