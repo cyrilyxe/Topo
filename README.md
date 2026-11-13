@@ -84,6 +84,28 @@ Trois façons de servir :
 
 La CLI `build`/`check`/`fix` fonctionne aussi sans `node_modules` (js-yaml est pris dans `vendor/`).
 
+## Installer Node (pour les commandes `node tools/topo.js …`)
+
+L'application elle-même n'a pas besoin de Node (ouvrir `index.html` suffit). Node ≥ 18 sert seulement à la CLI : `serve`, `build`, `check`, `fix`, `package`, `vendor`. Aucune dépendance npm n'est requise. Vérifier : `node --version`.
+
+| Système | Installation |
+|---|---|
+| Windows | `winget install OpenJS.NodeJS.LTS`, ou l'installeur « LTS » de https://nodejs.org |
+| macOS | `brew install node`, ou l'installeur de https://nodejs.org |
+| Debian / Ubuntu / WSL | `sudo apt install nodejs` (vérifier que la version est ≥ 18 ; sinon passer par https://nodejs.org/en/download ou `nvm`) |
+| Fedora / RHEL | `sudo dnf install nodejs` |
+
+**Poste sans internet (airgap)** : sur une machine connectée, télécharger l'archive « Standalone Binary » (Windows `.zip`, Linux `.tar.xz`) depuis https://nodejs.org/en/download, la copier avec le dossier Topo, l'extraire, puis appeler l'exécutable directement, sans installation ni droits administrateur :
+
+```bash
+# Windows (PowerShell)
+.\node-v22.x-win-x64\node.exe tools\topo.js serve
+# Linux
+./node-v22.x-linux-x64/bin/node tools/topo.js serve
+```
+
+Sous WSL, Node doit être installé dans WSL lui-même : le `node.exe` de Windows n'est pas visible depuis le shell Linux sous le nom `node`.
+
 ## Structure
 
 - `index.html`, `styles.css` : interface et thème (tokens CSS)
