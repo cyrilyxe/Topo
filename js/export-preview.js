@@ -53,7 +53,9 @@ const ExportPreview = {
 
       opt.value = f.id;
       opt.textContent = `${f.label} (.${f.ext})`;
-      opt.selected = f.id === this.format;
+      if (f.id === this.format) {
+        opt.setAttribute("selected", "");
+      }
 
       return opt.outerHTML;
     }).join("");
@@ -189,6 +191,13 @@ const ExportPreview = {
 
     const format = this.current();
     const isImage = format.kind === "image";
+    const select = this.panel.querySelector("[data-ep=format]");
+
+    // The select always shows the format actually previewed (the remembered one, or SVG as fallback).
+    if (select && select.value !== format.id) {
+      select.value = format.id;
+    }
+
     const view = this.panel.querySelector("[data-ep-view]");
     const status = this.panel.querySelector("[data-ep-status]");
     const note = this.panel.querySelector("[data-ep-note]");
