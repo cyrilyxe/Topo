@@ -1083,6 +1083,50 @@ const Graph = {
       });
 
       this.applyTextContrast(tok);
+      this.applyIcons();
+    });
+  },
+
+  // Brick icon (style `icon` / `iconOpacity`): left of the label on leaves and collapsed groups
+  // (the label is shifted right so it stays readable), faint full-size watermark on expanded groups.
+  applyIcons() {
+    if (typeof Icons === "undefined") {
+      return;
+    }
+
+    const scale = Style.scale();
+
+    this.cy.nodes().not(".meta-card").forEach((node) => {
+      const rule = node.data("rule") || {};
+      const uri = Icons.resolve(rule.icon, node.data("autoText"));
+
+      if (!uri) {
+        return;
+      }
+
+      const size = scale * (Number(rule.size) || 1);
+      const opacity = rule.iconOpacity;
+      const styles = { "background-image": uri, "background-repeat": "no-repeat", "background-image-opacity": opacity !== undefined ? opacity : 1 };
+
+      if (node.isParent()) {
+        Object.assign(styles, { "background-fit": "contain", "background-position-x": "50%", "background-position-y": "50%", "background-image-opacity": opacity !== undefined ? opacity : 0.12 });
+      } else {
+        const collapsed = node.hasClass("collapsed");
+        const box = (collapsed ? 56 : 42) * size;
+        const px = Math.round(box * (collapsed ? 0.7 : 0.6));
+
+        Object.assign(styles, {
+          "background-fit": "none",
+          "background-width": px,
+          "background-height": px,
+          "background-position-x": Math.round(10 * size),
+          "background-position-y": "50%",
+          "text-margin-x": Math.round((px + 6) / 2),
+          "text-max-width": Math.max(60, (collapsed ? 190 : 150) * size - px - 6)
+        });
+      }
+
+      node.style(styles);
     });
   },
 

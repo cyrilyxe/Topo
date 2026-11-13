@@ -540,6 +540,8 @@ const App = {
     if (!options.initial) {
       this.schedulePersistView();
     }
+
+    ExportPreview.notify();
   },
 
   scheduleApply() {
@@ -556,10 +558,36 @@ const App = {
     this.updateHeader();
   },
 
+  // Full name known for the current document (the browser never exposes the folder of a file handle).
+  fileTooltip() {
+    if (typeof Project !== "undefined" && Project.isOpen) {
+      return `Projet : dossier « ${Project.folder} »`;
+    }
+
+    const handle = Files.current.handle;
+
+    if (handle) {
+      return `${this.name}\nFichier lié au disque (le navigateur n’indique pas son dossier).\nCliquer pour renommer.`;
+    }
+
+    if (this.name) {
+      return `${this.name}\nPas de fichier lié sur le disque : « Enregistrer » ouvrira le sélecteur.\nCliquer pour renommer.`;
+    }
+
+    return `Pas encore enregistré. Nom proposé : ${this.suggestedName()}\nCliquer pour changer le nom proposé.`;
+  },
+
   updateHeader() {
     const name = this.name || "Sans titre";
+    const project = typeof Project !== "undefined" && Project.isOpen;
 
     this.els.docName.textContent = name;
+    this.els.docName.title = this.fileTooltip();
+
+    if (this.els.docOpenSaved) {
+      this.els.docOpenSaved.hidden = project || !Files.current.handle;
+    }
+
     this.els.docTitle.textContent = this.model && this.model.title ? this.model.title : "";
     this.els.dirty.hidden = !this.dirty;
     document.title = `${this.dirty ? "● " : ""}${name} — Topo`;
@@ -1211,6 +1239,10 @@ const App = {
   // ---- files ----
 
   suggestedName() {
+    if (this.proposedName) {
+      return this.proposedName;
+    }
+
     if (this.name) {
       return this.name;
     }
@@ -1248,6 +1280,73 @@ const App = {
     } catch (error) {
       console.warn("Bloc view non écrit :", error);
       return text;
+    }
+  },
+
+  // Valid file name (with .yaml / .yml extension) or "".
+  cleanFileName(value) {
+    const name = String(value || "").trim();
+
+    if (!name || /[\\/:*?"<>|]/.test(name) || /^\.+$/.test(name)) {
+      return "";
+    }
+
+    return /\.ya?ml$/i.test(name) ? name : `${name}.yaml`;
+  },
+
+  // Tab double-click / click on the file name. Without a file handle only the name changes; with one,
+  // the file is moved (handle.move) or saved under the new name, and the same tab follows it.
+  async renameDocument() {
+    if (typeof Project !== "undefined" && Project.isOpen) {
+      this.showMessage("Le nom d’un projet est celui de son dossier.", "warning");
+      return;
+    }
+
+    const handle = Files.current.handle;
+    const current = this.name || this.suggestedName();
+    const answer = await Forms.dialog({
+      title: "Renommer le document",
+      okLabel: handle ? "Enregistrer sous…" : "Renommer",
+      body: `<label class="forms-field"><span>Nom du fichier</span><input type="text" name="name" value="${escapeHtml(current)}" autocomplete="off" spellcheck="false" />
+        <small>${handle ? "Le navigateur ne peut pas toujours renommer un fichier sur place : sinon le document est enregistré sous ce nom et l’onglet suit le nouveau fichier." : "Nom proposé lors de l’enregistrement."}</small></label>`,
+      validate: (form) => (this.cleanFileName(form.elements.name.value) ? "" : "Nom de fichier invalide."),
+      collect: (form) => ({ name: this.cleanFileName(form.elements.name.value) })
+    });
+
+    if (!answer || answer.name === this.name) {
+      return;
+    }
+
+    if (!handle) {
+      this.name = answer.name;
+      Files.current = { name: this.name, handle: null };
+      this.persistText();
+      this.updateHeader();
+      this.showMessage(`Nom du document : « ${this.name} ».`, "success");
+      return;
+    }
+
+    if (typeof handle.move === "function") {
+      try {
+        await handle.move(answer.name);
+        this.name = handle.name || answer.name;
+        Files.current = { name: this.name, handle };
+        this.persistText();
+        await FileWatch.markSaved();
+        this.updateHeader();
+        this.showMessage(`Fichier renommé : « ${this.name} ».`, "success");
+        return;
+      } catch (error) {
+        // Not supported for this file: fall back to "Save as".
+      }
+    }
+
+    this.proposedName = answer.name;
+
+    try {
+      await this.save(true);
+    } finally {
+      this.proposedName = null;
     }
   },
 
@@ -1380,6 +1479,7 @@ const App = {
         }
       },
       "export-svg": () => this.exportAs("svg"),
+      "export-preview": () => ExportPreview.open(),
       "export-png": () => this.exportAs("png"),
       "export-json": () => this.exportAs("json"),
       "export-mermaid": () => this.exportAs("mermaid"),
@@ -1483,6 +1583,15 @@ const App = {
     const commands = this.commands();
 
     document.querySelectorAll(".dropdown-toggle").forEach((toggle) => {
+      // With a menu open, hovering another menu button switches to it (like a classic menu bar).
+      toggle.addEventListener("mouseenter", () => {
+        const open = document.querySelector(".dropdown-toggle[aria-expanded='true']");
+
+        if (open && open !== toggle) {
+          toggle.click();
+        }
+      });
+
       toggle.addEventListener("click", (event) => {
         event.stopPropagation();
 
@@ -1505,6 +1614,15 @@ const App = {
     document.querySelectorAll(".tab").forEach((tab) => {
       tab.addEventListener("click", () => this.showTab(tab.dataset.tab));
     });
+
+    this.els.docName.addEventListener("click", () => this.renameDocument());
+    this.els.docName.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.renameDocument();
+      }
+    });
+    this.els.docOpenSaved.addEventListener("click", () => FileWatch.reload());
 
     document.getElementById("btn-help").addEventListener("click", () => Help.open());
     document.getElementById("btn-theme").addEventListener("click", () => {
@@ -1693,6 +1811,7 @@ const App = {
       card: "meta-card",
       docName: "doc-name",
       docTitle: "doc-title",
+      docOpenSaved: "doc-open-saved",
       dirty: "dirty-marker",
       layoutSelect: "layout-select",
       saveView: "opt-save-view"
@@ -1814,6 +1933,7 @@ const App = {
     this.bindUi();
     Layouts.init();
     ViewUi.init();
+    EditorSearch.init();
     Tabs.init();
     FileWatch.init();
 

@@ -264,7 +264,7 @@
         <button type="button" class="icon-btn" data-lay="remove" title="Supprimer" aria-label="Supprimer">✕</button>
       </div>`).join("");
 
-    box.innerHTML = `<button type="button" role="menuitem" data-lay="save">Enregistrer la disposition actuelle sous…</button>${rows || "<div class=\"menu-empty\">Aucune disposition enregistrée.</div>"}`;
+    box.innerHTML = `<button type="button" role="menuitem" data-lay="save" title="Mémorise les positions actuelles sous un nom, dans le document.">Enregistrer la disposition actuelle sous…</button>${rows || "<div class=\"menu-empty\">Aucune disposition enregistrée.</div>"}`;
   };
 
   api.init = function init() {

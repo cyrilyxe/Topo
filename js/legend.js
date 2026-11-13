@@ -290,6 +290,13 @@ const Legend = {
     return `<svg class="lg-svg" viewBox="0 0 20 16" width="20" height="16" aria-hidden="true">${shape}</svg>`;
   },
 
+  // Small icon shown next to a type / role that defines `icon` (empty string otherwise).
+  iconHtml(kind, value, model) {
+    const uri = typeof Icons !== "undefined" ? Icons.resolve(this.entry(kind, value, model).icon, getComputedStyle(document.body).color) : null;
+
+    return uri ? `<img class="lg-icon" alt="" src="${escapeHtml(uri)}" />` : "";
+  },
+
   itemHtml(item, model) {
     const filters = Style.splitFilters(this.searchValue());
     const active = (item.kind === "type" ? filters.types : filters.roles).some((v) => v.toLowerCase() === item.name.toLowerCase());
@@ -298,7 +305,7 @@ const Legend = {
 
     return `<span class="lg-item${active ? " active" : ""}${item.count ? "" : " unused"}">
       <button type="button" class="lg-sw" data-lg="filter" data-kind="${item.kind}" data-value="${value}" title="Filtrer sur ${item.kind === "type" ? "ce type" : "ce rôle"} (Maj+clic : cumuler)" aria-pressed="${active}">${this.swatch(this.look(item.kind, item.name, model))}</button>
-      <button type="button" class="lg-name" data-lg="edit" data-kind="${item.kind}" data-value="${value}" title="Éditer le style ${item.kind === "type" ? "du type" : "du rôle"}${styled ? " (défini dans le fichier)" : ""}">${value}${styled ? " ✎" : ""}</button>
+      <button type="button" class="lg-name" data-lg="edit" data-kind="${item.kind}" data-value="${value}" title="Éditer le style ${item.kind === "type" ? "du type" : "du rôle"}${styled ? " (défini dans le fichier)" : ""}">${this.iconHtml(item.kind, item.name, model)}${value}${styled ? " ✎" : ""}</button>
       ${item.count ? `<small class="lg-count">${item.count}</small>` : ""}</span>`;
   },
 
@@ -494,6 +501,7 @@ const Legend = {
         <label><input type="checkbox" data-k="bold" ${entry.bold ? "checked" : ""} /> Gras</label>
         <label><input type="checkbox" data-k="italic" ${entry.italic ? "checked" : ""} /> Italique</label>
       </div>`}
+      ${isLink ? "" : `<div class="lg-field lg-icon-field"><span>Icône</span>${Icons.pickerHtml(entry.icon, entry.iconOpacity)}</div>`}
       <div class="lg-pop-actions"><button type="button" data-lg-reset="1" title="Supprime le style de ce ${label} du fichier">Défaut</button></div>`;
 
     document.body.appendChild(pop);
@@ -503,6 +511,19 @@ const Legend = {
     pop.addEventListener("input", (event) => this.onEditorInput(event));
     pop.addEventListener("change", (event) => this.onEditorChange(event));
     pop.addEventListener("click", (event) => this.onEditorClick(event));
+
+    if (!isLink) {
+      Icons.bind(pop, (patch) => {
+        const next = Object.assign({}, this.entry(kind, value, App.getModel()), patch);
+        const picker = pop.querySelector(".icon-picker");
+
+        this.setStyle(kind, value, patch);
+
+        if (picker && picker.isConnected) {
+          picker.outerHTML = Icons.pickerHtml(next.icon, next.iconOpacity);
+        }
+      });
+    }
     this.position(pop, anchor);
   },
 

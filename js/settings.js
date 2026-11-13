@@ -39,6 +39,7 @@
     choice("layout.default", "fcose", LAYOUT_OPTIONS, "Disposition par défaut", "Disposition appliquée quand le document n’en précise pas."),
     num("tree.indent", 28, 8, 80, 1, "Indentation de l’arbre (px)", "Décalage par niveau en disposition arbre."),
     bool("ui.sidePanel", true, "Afficher le panneau latéral", "Affiche le panneau latéral (éditeur, inspecteur, style, anomalies). Raccourci : Ctrl+B."),
+    bool("editor.searchBar", false, "Barre de recherche de l’éditeur", "Affiche en permanence la barre de recherche au-dessus de l’éditeur YAML (Ctrl+F l’ouvre et y place le curseur, même quand elle est masquée)."),
     bool("ui.controls", true, "Afficher les contrôles du diagramme", "Affiche la barre de contrôles du haut et la palette d’outils du diagramme (le menu Contrôles reste disponible)."),
     bool("fullscreen.edgeReveal", true, "Plein écran : révéler les panneaux au survol des bords", "En plein écran, survoler le bord gauche affiche le panneau latéral, le bord haut (ou la touche Alt) affiche le bandeau."),
     choice("meta.card.when", "never",["leaf", "expanded", "always", "never"], "Fiche métadonnée : quand", "leaf : brique sans enfant visible ; expanded : groupe déplié ; always ; never."),

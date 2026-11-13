@@ -50,44 +50,46 @@
       <span class="brand-name">Topo</span>
     </div>
 
-    <div class="doc-info">
-      <strong id="doc-name">Sans titre</strong>
+    <div class="doc-info" id="doc-info">
+      <strong id="doc-name" class="doc-name" role="button" tabindex="0" title="Cliquer pour renommer">Sans titre</strong>
       <span id="dirty-marker" class="dirty-marker" title="Modifications non enregistrées" hidden>●</span>
       <span id="doc-title" class="doc-title"></span>
+      <button type="button" id="doc-open-saved" class="doc-open-saved" title="Recharger ce document depuis le fichier enregistré sur le disque" hidden>Ouvrir le fichier enregistré</button>
     </div>
 
     <nav class="toolbar" aria-label="Barre d’outils">
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Fichier ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
-          <button type="button" role="menuitem" data-cmd="new">Nouveau (nouvel onglet)</button>
-          <button type="button" role="menuitem" data-cmd="open">Ouvrir…<kbd>Ctrl+O</kbd></button>
-          <button type="button" role="menuitem" data-cmd="save">Enregistrer<kbd>Ctrl+S</kbd></button>
-          <button type="button" role="menuitem" data-cmd="save-as">Enregistrer sous…<kbd>Ctrl+Maj+S</kbd></button>
+          <button type="button" role="menuitem" data-cmd="new" title="Crée un document vide dans un nouvel onglet.">Nouveau (nouvel onglet)</button>
+          <button type="button" role="menuitem" data-cmd="open" title="Ouvre un fichier YAML ou JSON dans un nouvel onglet.">Ouvrir…<kbd>Ctrl+O</kbd></button>
+          <button type="button" role="menuitem" data-cmd="save" title="Enregistre le document dans son fichier (propose un nom la première fois).">Enregistrer<kbd>Ctrl+S</kbd></button>
+          <button type="button" role="menuitem" data-cmd="save-as" title="Enregistre le document sous un autre nom ou dans un autre fichier ; l’onglet suit le nouveau fichier.">Enregistrer sous…<kbd>Ctrl+Maj+S</kbd></button>
           <button type="button" role="menuitem" data-cmd="reload" id="menu-reload">Recharger depuis le disque<kbd>Alt+R</kbd></button>
-          <button type="button" role="menuitem" data-cmd="close-tab">Fermer l’onglet<kbd>Ctrl+W</kbd></button>
-          <button type="button" role="menuitem" data-cmd="next-tab">Onglet suivant<kbd>Ctrl+Tab</kbd></button>
-          <button type="button" role="menuitem" data-cmd="prev-tab">Onglet précédent<kbd>Ctrl+Maj+Tab</kbd></button>
+          <button type="button" role="menuitem" data-cmd="close-tab" title="Ferme l’onglet courant (demande confirmation s’il y a des modifications).">Fermer l’onglet<kbd>Ctrl+W</kbd></button>
+          <button type="button" role="menuitem" data-cmd="next-tab" title="Passe à l’onglet de droite.">Onglet suivant<kbd>Ctrl+Tab</kbd></button>
+          <button type="button" role="menuitem" data-cmd="prev-tab" title="Passe à l’onglet de gauche.">Onglet précédent<kbd>Ctrl+Maj+Tab</kbd></button>
           <hr />
-          <button type="button" role="menuitem" data-cmd="import-json">Importer JSON…</button>
-          <button type="button" role="menuitem" data-cmd="reset">Charger l’exemple</button>
+          <button type="button" role="menuitem" data-cmd="import-json" title="Convertit un fichier JSON en YAML et l’ouvre dans un nouvel onglet.">Importer JSON…</button>
+          <button type="button" role="menuitem" data-cmd="reset" title="Remplace le document courant par le diagramme d’exemple.">Charger l’exemple</button>
         </div>
       </div>
 
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Exporter ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
-          <button type="button" role="menuitem" data-cmd="export-svg">Image SVG</button>
-          <button type="button" role="menuitem" data-cmd="export-png">Image PNG</button>
-          <button type="button" role="menuitem" data-cmd="export-json">JSON</button>
-          <button type="button" role="menuitem" data-cmd="export-mermaid">Mermaid</button>
+          <button type="button" role="menuitem" data-cmd="export-preview" title="Affiche le SVG tel qu’il serait exporté, avec rafraîchissement optionnel.">Aperçu…</button>
+          <button type="button" role="menuitem" data-cmd="export-svg" title="Télécharge le diagramme en image vectorielle (SVG).">Image SVG</button>
+          <button type="button" role="menuitem" data-cmd="export-png" title="Télécharge le diagramme en image PNG.">Image PNG</button>
+          <button type="button" role="menuitem" data-cmd="export-json" title="Télécharge le modèle (nœuds et liens) au format JSON.">JSON</button>
+          <button type="button" role="menuitem" data-cmd="export-mermaid" title="Télécharge le diagramme en texte Mermaid.">Mermaid</button>
         </div>
       </div>
 
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Projet ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
-          <button type="button" role="menuitem" id="btn-open-project" >Ouvrir un dossier de briques…</button>
+          <button type="button" role="menuitem" id="btn-open-project" title="Ouvre un dossier contenant des fichiers brick.yaml et les fusionne en un seul diagramme.">Ouvrir un dossier de briques…</button>
         </div>
       </div>
 
@@ -99,31 +101,35 @@
       <div class="dropdown">
         <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Vue ▾</button>
         <div class="dropdown-panel" role="menu" hidden>
-          <button type="button" role="menuitem" data-cmd="undo" id="menu-undo" disabled>Annuler<kbd>Ctrl+Z</kbd></button>
-          <button type="button" role="menuitem" data-cmd="redo" id="menu-redo" disabled>Rétablir<kbd>Ctrl+Y</kbd></button>
+          <button type="button" role="menuitem" data-cmd="undo" id="menu-undo" title="Annule la dernière modification du document." disabled>Annuler<kbd>Ctrl+Z</kbd></button>
+          <button type="button" role="menuitem" data-cmd="redo" id="menu-redo" title="Rétablit la modification annulée." disabled>Rétablir<kbd>Ctrl+Y</kbd></button>
           <hr />
-          <label class="menu-check">
+          <label class="menu-check" title="Affiche ou masque le panneau de gauche (éditeur, inspecteur, style).">
             <input id="opt-side-panel" type="checkbox" checked />
             Panneau latéral<kbd>Ctrl+B</kbd>
           </label>
-          <label class="menu-check">
+          <label class="menu-check" title="Afficher ou masquer la barre de contrôles et la palette d’outils du diagramme.">
             <input id="opt-controls" type="checkbox" checked />
             Contrôles du diagramme
           </label>
-          <button type="button" role="menuitem" data-cmd="fullscreen">Plein écran<kbd>Ctrl+Maj+F</kbd></button>
+          <label class="menu-check" title="Garde une barre de recherche visible au-dessus de l’éditeur YAML (Ctrl+F l’ouvre aussi).">
+            <input id="opt-search-bar" type="checkbox" />
+            Barre de recherche de l’éditeur
+          </label>
+          <button type="button" role="menuitem" data-cmd="fullscreen" title="Affiche le diagramme seul, en plein écran.">Plein écran<kbd>Ctrl+Maj+F</kbd></button>
           <hr />
-          <label class="menu-check">
+          <label class="menu-check" title="Écrit les positions, le zoom et les repliages dans le bloc view du fichier à l’enregistrement.">
             <input id="opt-save-view" type="checkbox" checked />
             Enregistrer la vue dans le fichier
           </label>
-          <button type="button" role="menuitem" data-cmd="apply">Appliquer le YAML maintenant</button>
-          <button type="button" role="menuitem" data-cmd="relayout">Recalculer la disposition</button>
-          <button type="button" role="menuitem" data-cmd="reset-view">Réinitialiser la vue</button>
+          <button type="button" role="menuitem" data-cmd="apply" title="Relit le YAML de l’éditeur et met le diagramme à jour sans attendre.">Appliquer le YAML maintenant</button>
+          <button type="button" role="menuitem" data-cmd="relayout" title="Replace automatiquement les nœuds selon la disposition choisie.">Recalculer la disposition</button>
+          <button type="button" role="menuitem" data-cmd="reset-view" title="Annule repliages, positions et zoom, puis recalcule la disposition.">Réinitialiser la vue</button>
           <hr />
-          <button type="button" id="layouts-toggle" class="menu-sub-toggle" aria-expanded="false" aria-controls="layouts-menu">Dispositions ▾</button>
+          <button type="button" id="layouts-toggle" class="menu-sub-toggle" aria-expanded="false" aria-controls="layouts-menu" title="Dispositions nommées enregistrées dans le document.">Dispositions ▾</button>
           <div id="layouts-menu" class="menu-sub-panel" hidden></div>
           <hr />
-          <button type="button" role="menuitem" data-cmd="settings">Réglages…</button>
+          <button type="button" role="menuitem" data-cmd="settings" title="Ouvre les réglages de l’application et du document.">Réglages…</button>
         </div>
       </div>
     </nav>
@@ -152,6 +158,19 @@
       <div id="selection-header" class="selection-header" aria-live="polite" hidden></div>
 
       <div id="pane-editor" class="pane active" role="tabpanel">
+        <div id="editor-search" class="editor-search" role="search" hidden>
+          <span class="es-field">
+            <input id="editor-search-input" type="text" list="editor-search-list" placeholder="Rechercher dans le YAML" aria-label="Rechercher dans l’éditeur" autocomplete="off" spellcheck="false" />
+            <button type="button" id="es-clear" class="es-btn es-inner" title="Effacer la recherche" aria-label="Effacer la recherche">✕</button>
+          </span>
+          <datalist id="editor-search-list"></datalist>
+          <span id="es-count" class="es-count" aria-live="polite" title="Correspondance courante / total"></span>
+          <button type="button" id="es-prev" class="es-btn" title="Correspondance précédente (Maj+Entrée)" aria-label="Correspondance précédente">▲</button>
+          <button type="button" id="es-next" class="es-btn" title="Correspondance suivante (Entrée)" aria-label="Correspondance suivante">▼</button>
+          <button type="button" id="es-case" class="es-btn es-toggle" aria-pressed="false" title="Respecter la casse">Aa</button>
+          <button type="button" id="es-regex" class="es-btn es-toggle" aria-pressed="false" title="Expression régulière">.*</button>
+          <button type="button" id="es-close" class="es-btn" title="Fermer la recherche (Échap)" aria-label="Fermer la recherche">✕</button>
+        </div>
         <textarea id="yaml-editor" spellcheck="false"></textarea>
       </div>
 
@@ -278,8 +297,10 @@
   <script src="js/settings.js"></script>
   <script src="js/merge.js"></script>
   <script src="js/editor.js"></script>
+  <script src="js/editor-search.js"></script>
   <script src="js/file-watch.js"></script>
   <script src="js/files.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/style.js"></script>
   <script src="js/repulsion.js"></script>
   <script src="js/tree-layout.js"></script>
@@ -291,6 +312,7 @@
   <script src="js/anomalies.js"></script>
   <script src="js/help.js"></script>
   <script src="js/forms.js"></script>
+  <script src="js/export-preview.js"></script>
   <script src="js/trash.js"></script>
   <script src="js/link-series.js"></script>
   <script src="js/tools.js"></script>

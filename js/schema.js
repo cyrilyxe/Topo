@@ -78,7 +78,9 @@
     ["textBackground", ["textBackground", "fond_texte"]],
     ["borderStyle", ["borderStyle", "style_bordure"]],
     ["borderWidth", ["borderWidth", "epaisseur_bordure"]],
-    ["shape", ["shape", "forme"]]
+    ["shape", ["shape", "forme"]],
+    ["icon", ["icon", "icone"]],
+    ["iconOpacity", ["iconOpacity", "opacite_icone"]]
   ];
 
   function normalizeRule(raw) {
@@ -176,7 +178,9 @@
     h("Style", "borderStyle", ["style_bordure"], "solid | dashed | dotted | double", "Style de la bordure du nœud.", "  borderStyle: dashed"),
     h("Style", "borderWidth", ["epaisseur_bordure"], "nombre 0–8", "Épaisseur de la bordure en pixels.", "  borderWidth: 4"),
     h("Style", "shape", ["forme"], "round-rectangle | rectangle | ellipse | hexagon | diamond | barrel | rhomboid | tag | star | octagon | cut-rectangle", "Forme du nœud (feuilles et groupes repliés ; un groupe déplié reste un rectangle). Valable dans une règle, un rôle ou un type.", "  shape: hexagon"),
-    h("Style", "style.roles", ["roles"], "objet", "Style partagé par toutes les briques d’un rôle (clés : color, border, borderStyle, borderWidth, shape, textColor, bold, italic, opacity, size). Priorité : défaut du type < style.types < style.roles < règle de brique.", "style:\n  roles:\n    domain: { shape: hexagon, color: \"#fde68a\" }"),
+    h("Style", "icon", ["icone"], "nom | URL | data:image", "Icône de la brique : nom intégré (server, database, cloud, user, users, mobile, laptop, api, queue, file, folder, lock, key, globe, wifi, bluetooth, usb, usb-c, house, building, city, gear) ou URL / data-URI d’image (SVG, PNG ; importable depuis l’onglet Style, 200 Ko max). À gauche du libellé sur une feuille ou un groupe replié ; en filigrane sur un groupe déplié. Valable dans une règle, un rôle ou un type.", "  icon: database"),
+    h("Style", "iconOpacity", ["opacite_icone"], "nombre 0–1", "Opacité de l’icône (défaut : 1 ; 0.12 pour le filigrane d’un groupe déplié).", "  iconOpacity: 0.5"),
+    h("Style", "style.roles", ["roles"], "objet", "Style partagé par toutes les briques d’un rôle (clés : color, border, borderStyle, borderWidth, shape, icon, iconOpacity, textColor, bold, italic, opacity, size). Priorité : défaut du type < style.types < style.roles < règle de brique.", "style:\n  roles:\n    domain: { shape: hexagon, color: \"#fde68a\" }"),
     h("Style", "style.types", [], "objet", "Style partagé par toutes les briques d’un type (mêmes clés que style.roles).", "style:\n  types:\n    database: { shape: barrel }"),
     h("Style", "style.links", [], "objet", "Style partagé par tous les liens d’un type : { <type>: {color, width, line, arrow, sourceArrow, textColor} }. Priorité : défaut < style.links[type] < links[].style.", "style:\n  links:\n    async: { line: dotted, arrow: vee, color: \"#7c3aed\" }"),
     h("Recherche", "type:x role:y", [], "filtre", "Dans le champ de recherche : type:service role:user (guillemets si espace : role:\"my role\"). Plusieurs valeurs d’une même clé = OU, clés différentes = ET ; combinable avec du texte ou une /regex/. Les puces de la légende écrivent ces filtres (Maj+clic : cumuler).", "type:service role:user api"),
@@ -204,6 +208,7 @@
     h("Réglages", "layout.default", [], "texte", "Disposition par défaut : fcose, cose, breadthfirst, grid, circle, concentric ou tree (défaut : fcose).", "  layout.default: tree"),
     h("Réglages", "tree.indent", [], "nombre (px)", "Indentation par niveau en disposition arbre (défaut : 28).", "  tree.indent: 28"),
     h("Réglages", "ui.sidePanel", [], "booléen", "Affiche le panneau latéral (défaut : true ; Vue > Panneau latéral, Ctrl+B).", "  ui.sidePanel: false"),
+    h("Réglages", "editor.searchBar", [], "booléen", "Affiche en permanence la barre de recherche de l’éditeur (défaut : false ; Vue > Barre de recherche de l’éditeur ; Ctrl+F l’ouvre dans tous les cas).", "  editor.searchBar: true"),
     h("Réglages", "ui.controls", [], "booléen", "Affiche la barre de contrôles et la palette d’outils du diagramme (défaut : true ; menu Contrôles).", "  ui.controls: false"),
     h("Réglages", "fullscreen.edgeReveal", [], "booléen", "Plein écran : le survol des bords (gauche : panneau, haut : bandeau) les fait apparaître en superposition (défaut : true).", "  fullscreen.edgeReveal: true"),
     h("Réglages", "meta.keys", [], "liste de textes", "Clés de métadonnées proposées dans le formulaire de brique, en plus de celles déjà utilisées dans le projet (défaut : owner, status, path, repo, version, environment, todo, doc).", "  meta.keys: [owner, status, repo]"),
@@ -232,7 +237,8 @@
     { keys: "Ctrl+Shift+S", description: "Enregistrer sous…" },
     { keys: "Ctrl+O", description: "Ouvrir un fichier" },
     { keys: "Alt+R", description: "Recharger depuis le disque (fichier ouvert avec accès direct ; en mode projet, relit toutes les briques) ; Ctrl+Z revient au texte d’avant" },
-    { keys: "Ctrl+F", description: "Rechercher un nœud" },
+    { keys: "Ctrl+F", description: "Dans l’éditeur : ouvrir la barre de recherche (Entrée / Maj+Entrée = suivant / précédent, Échap = fermer ; ids du modèle proposés)" },
+    { keys: "Double-clic sur un onglet, clic sur le nom de fichier", description: "Renommer le document (sans fichier : change le nom proposé ; avec fichier : « Enregistrer sous… » avec le nouveau nom, l’onglet suit)" },
     { keys: "Ctrl+Z", description: "Annuler la dernière action graphique" },
     { keys: "Ctrl+Y", description: "Rétablir (aussi Ctrl+Shift+Z)" },
     { keys: "Ctrl+Alt+1…9", description: "Appliquer la n-ième disposition nommée" },
